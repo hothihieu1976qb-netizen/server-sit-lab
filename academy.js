@@ -14,10 +14,13 @@ function courseEvents(record){
  return [...map.values()].sort((a,b)=>a.seq-b.seq);
 }
 function courseChecks(lesson,record){
-  const events=courseEvents(record).filter(e=>!e.failed),has=cmd=>events.some(e=>e.command===cmd),all=commands=>commands.every(has),contains=(cmd,re)=>events.some(e=>e.command===cmd&&re.test(e.output)),rows=[];
+  const events=courseEvents(record).filter(e=>!e.failed&&!e.helpOnly&&!/\s--help(?:\s|$)/.test(e.raw)),has=cmd=>events.some(e=>e.command===cmd),all=commands=>commands.every(has),contains=(cmd,re)=>events.some(e=>e.command===cmd&&re.test(e.output)),rows=[];
   const check=(name,ok,detail)=>rows.push({name,ok:!!ok,detail});
   for(const key of lesson.checks||[]){
-    if(key==='identity')check('本课实际执行身份、目录及接口检查',all(['whoami','id','pwd','ip']),'只认本课开始后的操作记录。');
+    if(key==='identity'){
+      const link = events.some(e=>e.key==='ip link'&&!e.fromB&&/^enp3s0\s|^\d+:\s+enp3s0:|^lo\s|^\d+:\s+lo:/m.test(e.output)&&!/^sim b\s/.test(e.raw));
+      check('本课实际执行身份、目录及接口检查',all(['whoami','id','pwd'])&&link,'需要本机接口列表，ip route只能证明查过路由。');
+    }
     if(key==='inventory'){
       check('采集主机及BIOS',events.some(e=>e.command==='dmidecode'&&e.opts['-t']==='system')&&events.some(e=>e.command==='dmidecode'&&e.opts['-t']==='bios'),'型号与BIOS分别记录。');
       check('采集系统、内核与CPU/内存',all(['uname','lscpu','free'])&&events.some(e=>e.command==='cat'&&e.raw.includes('/etc/os-release')),'发行版与内核不混写。');
@@ -93,7 +96,7 @@ function reviewCourse(){
 function fioCourseGroups(record){
   const map=new Map();for(const e of courseEvents(record)){const r=e.fio;if(e.failed||!r||r.error)continue;const c=r.config;
     if(c.bs!=='4k'||c.rw!=='randread'||c.jobs!==1||c.direct!==1||c.engine!=='libaio'||!c.target.startsWith('/mnt/sit/'))continue;
-    const key=JSON.stringify([e.projectId,c.target,c.bs,c.rw,c.jobs,c.direct,c.engine,c.size,c.runtime,c.timeBased,r.scene,r.version]);
+    const key=JSON.stringify([e.projectId,r.environmentKey,r.conditions?.underLoad,c.target,c.bs,c.rw,c.jobs,c.direct,c.engine,c.size,c.runtime,c.timeBased,r.scene,r.version]);
     if(!map.has(key))map.set(key,{q1:[],q16:[],config:c});if(c.depth===1)map.get(key).q1.push(r);if(c.depth===16)map.get(key).q16.push(r);
   }return [...map.values()];
 }

@@ -41,7 +41,7 @@ const COMMAND_SPECS={
  less:{purpose:'查看虚拟日志全文快照。',positional:'读取虚拟文件 {v}；真实less是分页器，本模型只展示一次。',fields:[['file lines','.+','日志按原顺序展示；真实less用q退出。']],memory:'less读上下文，真实环境q退出。'},
  systemctl:{purpose:'查看服务或系统单元状态。',options:{'--failed':['只列失败单元。']},positional:'status查看单元状态；list-units列运行单元；服务名选定目标。',fields:[['UNIT / LOAD / ACTIVE / SUB','UNIT|loaded','单元、是否加载、总体与详细状态。'],['Active / PID / exit status','Active:|PID|status=','运行状态、进程号、退出码；failed不是根因。'],['0 loaded units listed','0 loaded','本次筛选未发现失败单元，不代表全部硬件测试通过。']],memory:'status看状态，journal -u找原因。'},
  fio:{purpose:'按指定文件和负载模拟存储I/O。',options:{
- '--name':['作业名称。','value',v=>v+'只是任务名，不决定读写模式。'],'--filename':['测试目标文件。','value',v=>v+'是本次虚拟文件；应位于独立测试盘，裸设备不支持。'],'--rw':['访问模式。','value',v=>({read:'顺序读',write:'顺序写',randread:'随机读',randwrite:'随机写',rw:'顺序混合读写',randrw:'随机混合读写',trim:'丢弃/TRIM；本模型只解释，不运行'})[v]||'当前模型未实现该模式。'],'--bs':['单次I/O块大小。','value',v=>v+'采用二进制KiB/MiB单位；不是文件总大小。'],'--size':['每个作业的数据集大小。','value',v=>v+'是每作业数据集；与bs不同。'],'--runtime':['模拟运行时间上限。','value',v=>v+'秒；未启用time_based时可能先完成数据集而提前结束。'],'--time_based':['循环数据集直到运行时间上限。','bool',v=>v==='0'?'关闭持续时间模式。':'开启持续时间模式。'],'--iodepth':['每个作业目标在途I/O数量。','value',v=>v+'个未完成请求；sync引擎有效深度通常为1。'],'--numjobs':['并行作业数。','value',v=>v+'个作业；总在途约有效深度×作业数。'],'--direct':['是否绕过操作系统页缓存。','value',v=>v==='1'?'1：直接I/O，不等于绕过磁盘内部缓存。':v==='0'?'0：使用缓存I/O，不可与direct=1简单比较。':'仅支持0或1。'],'--ioengine':['I/O引擎。','value',v=>v==='libaio'?'libaio：本模拟采用异步I/O模型。':v==='sync'?'sync：同步I/O，每作业有效深度1。':'此引擎尚未实现。'],'--rwmixread':['混合模式中的读百分比。','value',v=>v+'%读、'+(100-Number(v))+'%写，仅rw/randrw生效。'],'--group_reporting':['将并行作业统计汇总显示。','bool',v=>v==='0'?'关闭分组汇总，按每作业等分模型展示。':'开启作业组汇总，不会凭此增加吞吐。']},fields:[['READ / WRITE / IOPS','READ:|WRITE:','读写方向与每秒操作次数，混合模式分方向。'],['BW / MiB / sec','BW=','带宽、总传输量与模拟运行时间；BW≈IOPS×块大小。'],['slat','^\\s*slat','提交延迟；本输出单位为ms。'],['clat','^\\s*clat \\(msec','提交到完成的延迟，含排队。'],['lat','^\\s*lat ','总延迟，近似slat+clat。'],['P50 / P95 / P99','50.00th|95.00th|99.00th','完成延迟百分位；P99表示99%请求不超过该值，不是最大值。'],['effective outstanding / runtime','effective|runtime=','实际模型在途数、时间上限与是否循环数据集。']],memory:'rw定方式，bs定块，深度乘作业；次数、带宽、延迟一起看。',mistake:'增大并发可能提高IOPS，也会增加排队；短测和缓存条件不同不直接比较。'},
+ '--name':['作业名称。','value',v=>v+'只是任务名，不决定读写模式。'],'--filename':['测试目标文件。','value',v=>v+'是本次虚拟文件；应位于独立测试盘，裸设备不支持。'],'--rw':['访问模式。','value',v=>({read:'顺序读',write:'顺序写',randread:'随机读',randwrite:'随机写',rw:'顺序混合读写',randrw:'随机混合读写',trim:'丢弃/TRIM；本模型只解释，不运行'})[v]||'当前模型未实现该模式。'],'--bs':['单次I/O块大小。','value',v=>v+'采用二进制KiB/MiB单位；不是文件总大小。'],'--size':['每个作业的数据集大小。','value',v=>v+'是每作业数据集；与bs不同。'],'--runtime':['模拟运行时间上限。','value',v=>v+'秒；未启用time_based时可能先完成数据集而提前结束。'],'--time_based':['循环数据集直到运行时间上限。','bool',v=>v==='0'?'关闭持续时间模式。':'开启持续时间模式。'],'--iodepth':['每个作业目标在途I/O数量。','value',v=>v+'个未完成请求；sync引擎有效深度通常为1。'],'--numjobs':['并行作业数。','value',v=>v+'个作业；总在途约有效深度×作业数。'],'--direct':['是否绕过操作系统页缓存。','value',v=>v==='1'?'1：直接I/O，不等于绕过磁盘内部缓存。':v==='0'?'0：使用缓存I/O，不可与direct=1简单比较。':'仅支持0或1。'],'--ioengine':['I/O引擎。','value',v=>v==='libaio'?'libaio：本模拟采用异步I/O模型。':v==='sync'?'sync：同步I/O，每作业有效深度1。':v==='io_uring'?'io_uring：本教学配置仅在5.10和6.6启用；是否可用仍受内核配置及工具构建影响。':'此引擎尚未实现。'],'--rwmixread':['混合模式中的读百分比。','value',v=>v+'%读、'+(100-Number(v))+'%写，仅rw/randrw生效。'],'--group_reporting':['将并行作业统计汇总显示。','bool',v=>v==='0'?'关闭分组汇总，按每作业等分模型展示。':'开启作业组汇总，不会凭此增加吞吐。']},fields:[['READ / WRITE / IOPS','READ:|WRITE:','读写方向与每秒操作次数，混合模式分方向。'],['BW / MiB / sec','BW=','带宽、总传输量与模拟运行时间；BW≈IOPS×块大小。'],['slat','^\\s*slat','提交延迟；本输出单位为ms。'],['clat','^\\s*clat \\(msec','提交到完成的延迟，含排队。'],['lat','^\\s*lat ','总延迟，近似slat+clat。'],['P50 / P95 / P99','50.00th|95.00th|99.00th','完成延迟百分位；P99表示99%请求不超过该值，不是最大值。'],['effective outstanding / runtime','effective|runtime=','实际模型在途数、时间上限与是否循环数据集。']],memory:'rw定方式，bs定块，深度乘作业；次数、带宽、延迟一起看。',mistake:'增大并发可能提高IOPS，也会增加排队；短测和缓存条件不同不直接比较。'},
  stress:{purpose:'以worker数量模拟CPU、内存及sync类I/O压力。',options:{'--cpu':['CPU worker数量。','value',v=>v+'个忙worker；16逻辑线程上的平均CPU不一定是'+v+'%。'],'--vm':['内存worker数量。','value',v=>v+'个内存worker；总申请量=个数×每个大小。'],'--vm-bytes':['每个内存worker的申请量。','value',v=>v+'为每个worker，不是所有worker的总量。'],'--io':['重复sync类I/O worker数量。','value',v=>v+'个sync类worker；不等于fio磁盘带宽测试，也不写真实盘。'],'--timeout':['最长模拟时长。','value',v=>v+'：s为秒、m为分钟；到时停止。']},fields:[['dispatching / requested','dispatching|memory requested','各类worker数与总内存请求；请求不保证成功分配。'],['exit / elapsed','elapsed=|exit','结束方式与实际模拟时长。'],['error / OOM','error|Out of memory','异常需停止、保留参数、查内核日志。']],memory:'CPU数worker，内存按每个乘，io非基准，timeout控时长。'},
  vmstat:{purpose:'查看调度、内存、交换、I/O和CPU快照。',positional:'采样间隔 {v} 秒；此模拟器只输出一次快照。',fields:[['r / b',' r b','可运行队列与阻塞进程数。'],['swpd / free / buff / cache','swpd|^ \\d','交换区已用及空闲、缓冲、缓存，内存计数单位KiB。'],['si / so','si so','每秒换入/换出KiB；不等于交换区已用容量。'],['bi / bo','bi bo','块设备输入/输出统计。'],['us / sy / id / wa','us sy id wa','用户态、内核态、空闲与I/O等待占比。']],memory:'r看排队，b看阻塞，si/so看换页，wa看等盘。'}
 };
@@ -50,21 +50,31 @@ COMMAND_SPECS.hostname={purpose:'显示主机名。',fields:[['hostname','sit-se
 COMMAND_SPECS.pwd={purpose:'显示当前虚拟工作目录。',fields:[['directory','^/','当前目录路径。']],memory:'pwd问现在在哪。'};
 for(const name of ['clear','stop','pkill','save-logs','reboot','help','sim'])COMMAND_SPECS[name]={purpose:({clear:'清空当前终端显示，不删除历史或证据。',stop:'停止模拟负载。',pkill:'本模型仅支持停止stress进程组。','save-logs':'将已收集输出保存在虚拟日志文件。',reboot:'模拟重新启动，不重启真实电脑。',help:'查看模拟器支持的命令。',sim:'实验室辅助操作，区别于真实Linux命令。'})[name],fields:[['status','.+','本次模拟动作的状态；不对真实硬件生效。']],memory:'模拟动作在本地，结果与证据要核对。'};
 
+const PRACTICE_COMMAND_SPECS={
+    ls:{purpose:'查看目录本身或虚拟文件的权限和归属。',options:{'-l':['长格式显示权限、属主与属组。'],'-d':['显示目录本身，不列目录内容。']}},
+    touch:{purpose:'在测试卷创建一个空的虚拟探测文件。',positional:'创建或更新时间的虚拟路径 {v}。'},
+    df:{...COMMAND_SPECS.df,options:{...COMMAND_SPECS.df.options,'-i':['显示 inode 数量、已用与可用，单位是个。']}}
+};
+
 function shellWords(raw){return (raw.match(/(?:[^\s"'|>]+|"[^"]*"|'[^']*')+|[|>]/g)||[]).map(t=>t.replace(/["']/g,''));}
-function analyseInput(raw){
+function analyseInput(raw,{practice=true}={}){
   const words=shellWords(raw),segments=[],operators=[],issues=[];let list=[];
-  for(const word of words){if(word==='|'||word==='>'){if(list.length)segments.push(parseSegment(list));list=[];operators.push(word);}else list.push(word);}
-  if(list.length)segments.push(parseSegment(list));
+  for(const word of words){if(word==='|'||word==='>'){if(list.length)segments.push(parseSegment(list,practice));list=[];operators.push(word);}else list.push(word);}
+  if(list.length)segments.push(parseSegment(list,practice));
   if(operators.includes('>')){const target=segments.pop();if(!target||target.words.length!==1||!/^\/tmp\/[\w.-]+$/.test(target.words[0]))issues.push('重定向仅支持虚拟 /tmp/文件名。');else operators.push(target.words[0]);}
   segments.forEach(s=>issues.push(...s.issues));
   if(operators.includes('|')&&(segments.length!==2||segments[1].command!=='grep'))issues.push('本模拟只实现“命令 | grep [-i] 文本”这一管道。');
   return {raw,segments,operators,issues};
 }
-function parseSegment(input){
+function parseSegment(input,practice=false){
   const words=[...input],parts=[],issues=[],opts={},positionals=[];let fromB=false;
   if(words[0]==='sudo'){parts.push({token:words.shift(),meaning:'以提权语义执行；本模型不改变真实权限。'});}
   if(words[0]==='sim'&&words[1]==='b'){words.splice(0,2);fromB=true;parts.push({token:'sim b',meaning:'实验室辅助前缀：在B端网络子系统运行后续命令，不是真实Linux选项。'});}
-  const command=words[0]||'',spec=COMMAND_SPECS[command],optionSpecs=spec?.options||{};
+  const command=words[0]||'';
+  const spec=practice&&command==='mount'&&words.length>1
+    ?{...COMMAND_SPECS.mount,purpose:'按模拟 fstab 挂载指定目标。',positional:'要挂载的目标 {v}。'}
+    :practice&&PRACTICE_COMMAND_SPECS[command]||COMMAND_SPECS[command];
+  const optionSpecs=spec?.options||{};
   parts.push({token:command,meaning:spec?.purpose||'当前模拟器尚未实现此命令。',unsupported:!spec});
   if(!spec)issues.push('尚未实现命令 '+command);
   function addOption(flag,value,desc){
@@ -88,20 +98,48 @@ function parseSegment(input){
     }else{positionals.push(word);parts.push({token:word,meaning:(spec?.positional||'位置参数 {v}。').replace('{v}',word)});}
   }
   const supportedPositionals={ip:['link','addr','route','neigh'],systemctl:['status','list-units','sit-agent','sit-agent.service','NetworkManager','NetworkManager.service'],ps:['aux'],modinfo:['simnic','simhba'],pkill:['stress','stress-ng']};
-  if(supportedPositionals[command]&&positionals.some(v=>!supportedPositionals[command].includes(v)))issues.push(command+' 的该位置参数尚未实现。');
-  if(['uname','lscpu','free','top','uptime','hostnamectl','whoami','id','date','history','nproc','lsmod','df','mount','ss','route'].includes(command)&&positionals.length)issues.push(command+' 不支持本次位置参数。');
+  const hasLabAction=command==='ip'&&practice&&['addr','link'].includes(positionals[0])&&positionals.length>1;
+  const routeLookup=command==='ip'&&practice&&positionals[0]==='route'&&positionals[1]==='get'&&positionals.length===3;
+  const restart=command==='systemctl'&&practice&&positionals[0]==='restart'&&positionals.length===2&&['sit-agent','sit-agent.service'].includes(positionals[1]);
+  if(routeLookup){
+    parts.at(-2).meaning='按具体目的地址查询实际选择的路由。';
+    parts.at(-1).meaning='要解析下一跳和出口的对端 IPv4 地址。';
+  }
+  if(restart)parts.at(-2).meaning='停止并重新启动指定虚拟服务，读取已保存配置。';
+  if(supportedPositionals[command]&&!hasLabAction&&!routeLookup&&!restart&&positionals.some(v=>!supportedPositionals[command].includes(v)))issues.push(command+' 的该位置参数尚未实现。');
+  if(hasLabAction){
+    const actionParts=parts.slice(-positionals.length+1);
+    const meanings=positionals[0]==='addr'
+      ? [positionals[1]==='add'?'向当前接口添加临时地址。':'删除当前接口的临时地址。','IPv4 地址及其网络前缀长度，用于确定直连子网。','指定要操作的接口。','目标接口名称。']
+      : ['修改当前接口的状态。','指定要操作的接口。','目标接口名称。',positionals.at(-1)==='up'?'启用接口。':'停用接口。'];
+    if(actionParts.length===meanings.length)actionParts.forEach((part,i)=>{part.meaning=meanings[i];});
+  }
+  if(['uname','lscpu','free','top','uptime','hostnamectl','whoami','id','date','history','nproc','lsmod','df','mount','ss','route'].includes(command)&&positionals.length&&!(command==='mount'&&practice&&positionals.length===1&&positionals[0]==='/mnt/sit'))issues.push(command+' 不支持本次位置参数。');
   if(['blkid','lsblk','lspci','fdisk','dmidecode'].includes(command)&&positionals.length)issues.push(command+' 当前不实现设备筛选位置参数。');
-  if(['cat','smartctl','modinfo','ping','ethtool','traceroute','tail','less'].includes(command)&&!positionals.length&&!opts['--help'])issues.push(command+' 缺少目标文件、设备或地址。');
+  if(['cat','smartctl','modinfo','ping','ethtool','traceroute','tail','less','ls','touch'].includes(command)&&!positionals.length&&!opts['--help'])issues.push(command+' 缺少目标文件、设备或地址。');
   if(opts['-o']&&opts['-o']!=='NAME,SIZE,MODEL')issues.push('lsblk -o 当前只实现NAME,SIZE,MODEL。');
   if(command==='free'&&opts['-h']&&opts['-m'])issues.push('free 当前请选择-h或-m一种显示单位。');
-  if(command==='dmidecode'&&!['system','bios'].includes(opts['-t']))issues.push('dmidecode -t 仅支持system/bios。');
+  if(command==='dmidecode'&&!opts['--help']&&!['system','bios'].includes(opts['-t']))issues.push('dmidecode -t 仅支持system/bios。');
   if(command==='journalctl'&&opts['-u']&&!['sit-agent','sit-agent.service'].includes(opts['-u']))issues.push('当前只模拟sit-agent服务日志。');
   if(fromB&&!['iperf3','ip'].includes(command))issues.push('B端只模拟ip和iperf3网络子系统。');
   if(['vmstat','iostat'].includes(command)&&positionals.some(v=>!/^\d+$/.test(v)||Number(v)<1))issues.push('采样间隔必须为正整数；本模型输出单次快照。');
   if(['cat','du','findmnt','smartctl','modinfo','ping','traceroute','tail','less'].includes(command)&&positionals.length>1)issues.push(command+' 当前仅支持单个目标。');
   if(command==='fio'&&positionals.some(v=>!['/mnt/sit/low.fio','/mnt/sit/fixed.fio'].includes(v)))issues.push('当前只实现low.fio与fixed.fio这两个虚拟作业文件。');
   if(command==='journalctl'&&positionals.length)issues.push('journalctl 当前仅实现-b [0/-1]、-k及-u sit-agent。');
+  if(practice&&command==='sim'&&PRACTICE_ACTIONS[positionals[0]]){
+    const [purpose,value]=PRACTICE_ACTIONS[positionals[0]];
+    if(parts[1])parts[1].meaning=purpose;
+    if(parts[2])parts[2].meaning=value;
+  }
   if(command==='stress-ng'&&opts['--io'])issues.push('stress-ng的--io未实现；本模型只在stress中提供该选项。');
+  if(command==='sim'&&positionals[0]==='kernel'){
+    const descriptions=['操作模拟启动内核。',({list:'列出教学配置。',select:'仅选择下次启动版本，需 reboot 生效。',rollback:'将下次启动设为上一运行版本，需 reboot。'})[positionals[1]]||'未实现的内核操作。',KERNEL_PROFILES[positionals[2]]?'目标 '+KERNEL_PROFILES[positionals[2]].release+'，不代表官方发行版支持。':'尚未实现的教学版本。'];
+    parts.slice(-positionals.length).forEach((p,i)=>p.meaning=descriptions[i]||'未实现的位置参数。');
+  }
+  if(command==='sim'&&positionals[0]==='driver'){
+    const descriptions=['管理模拟驱动包。','install：安装包，不自动加载。',positionals[2]+'：目标模块名。',positionals[3]+'：包所属的教学内核目录。'];
+    parts.slice(-positionals.length).forEach((p,i)=>p.meaning=descriptions[i]||'未实现的位置参数。');
+  }
   const sub=['ip','systemctl'].includes(command)?positionals[0]||'default':'';
   return {command,words,input,fromB,spec,parts,opts,positionals,issues,key:command+(sub?' '+sub:'')};
 }
@@ -109,8 +147,6 @@ function outputFields(parsed,output){
   const segment=parsed.segments[0],spec=segment?.spec;if(!spec)return [];
   const lines=output.split('\n'),rows=[];
   for(const [field,pattern,meaning] of spec.fields||[]){const matches=lines.filter(line=>new RegExp(pattern,'i').test(line));if(matches.length)rows.push({field,actual:matches.slice(0,3).join('\n'),meaning});}
-  const errors=lines.filter(line=>/error|failed|invalid|unreachable|refused|No such|No space|not mounted|unsupported|not found/i.test(line));
-  if(errors.length)rows.push({field:'本次错误 / 状态',actual:errors.join('\n'),meaning:'本次未获得正常结果。保留原始报错，先确认目标、前置条件与参数，再决定下一条检查命令。'});
   return rows;
 }
 function knowledgeFor(segment){
@@ -141,24 +177,66 @@ function terminalOutput(raw,output,parsed){
   if(cmd==='sim')return 'sim: action completed (virtual lab)';
   return cmd+(chineseErrors?': invalid argument or unsupported simulated target':': simulation status unavailable');
 }
-function lessonForRun(raw,output,parsed,failed){
-  const segments=parsed.segments,main=segments[0],kb=main&&knowledgeFor(main),fields=outputFields(parsed,output);
-  return {raw,output,parsed,failed,at:stamp(),fields,purpose:main?.spec?.purpose||'当前模拟器未实现此命令。',usage:kb?.[3]||'用于本地模拟服务器操作；先确认目标与前置条件。',interview:'我在个人模拟环境中用 '+(main?.command||'该命令')+' '+(kb?.[2]||main?.spec?.purpose||'确认信息')+'，重点核对 '+(kb?.[4]||fields.map(r=>r.field).join('、')||'命令返回状态')+'；发现异常时记录参数和输出，再按证据排查。',mnemonic:main?.spec?.memory||'先明确目的，再执行，再看证据。',mistake:main?.spec?.mistake||'命令成功不等于所有功能通过；不要把一个字段直接当作根因。'};
+function lessonForRun(raw,output,parsed,failed,event=null){
+  const main=parsed.segments[0], kb=main&&knowledgeFor(main), topic=commandTeaching(main);
+  const fields=teachingRows(main,output,event);
+  const secondary=outputFields(parsed,output);
+  const inferredReason = parsed.issues.length?'syntax'
+    :/No space left/i.test(output)?'no-space'
+    :/Input\/output error/i.test(output)?'io-error'
+    :/volume is not mounted/i.test(output)?'not-mounted'
+    :/Connection refused/i.test(output)?'no-listener':null;
+  const failure=failed?TEACHING_FAILURES[event?.reason||inferredReason]:null;
+  const purpose=main?.spec?.purpose||'查看本次命令的执行状态。';
+  return {
+    raw,output,parsed,failed,event,at:event?.at||stamp(),fields,secondary,purpose,
+    headline:failure?.[0]|| (failed?'本次没有取得所请求的结果。':topic?.[0]||purpose),
+    limits:topic?.[1]||main?.spec?.mistake||'本次输出只说明当前环境中已观察到的结果。',
+    next:failure?.[1]||topic?.[2]||kb?.[3]||'结合当前任务，确定还需要哪一条证据。',
+    usage:kb?.[3]||topic?.[2]||'根据当前任务验证输出。', interview:[topic?.[0]||purpose,topic?.[1],topic?.[2]].filter(Boolean).join(' '),
+    mnemonic:main?.spec?.memory||'先观察，再验证。'
+  };
 }
+
+function renderFieldRows(rows){
+  return rows.map(f=>`<div class="output-field"><b>${esc(f.field)}</b><pre>${esc(f.actual)}</pre><p>${esc(f.meaning)}</p></div>`).join('');
+}
+
 function renderCommandLesson(){
   const host=$('command-lesson'),lesson=S.lastLesson,c=S.coach,exam=assessmentActive();
-  $('coach-layout').classList.toggle('lesson-collapsed',c.hidden||exam);$('lesson-toggle').textContent=c.hidden?'展开命令解析':'折叠命令解析';$('lesson-toggle').disabled=exam;
-  if(exam){host.innerHTML='';return;}
-  if(!lesson){host.innerHTML='<div class="empty-state"><span>⌘</span><h3>每条命令，都有自己的解释</h3><p>在左侧输入命令。这里会拆解实际参数、解释本次输出，并提供一个可跳过的记忆检查。</p></div>';return;}
-  const rows=lesson.parsed.segments.flatMap(s=>s.parts),fields=lesson.fields;
-  host.innerHTML=`<div class="lesson-command"><span>本次实际输入</span><code>${esc(lesson.raw)}</code><small>${esc(lesson.at)} · ${lesson.failed?'未完成 / 有错误':'已返回模拟结果'}</small></div><h3>A · 命令作用</h3><p>${esc(lesson.purpose)}</p><h3>B / C · 结构、参数和本次取值</h3><table><thead><tr><th>实际部分</th><th>含义与取值解释</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.unsupported?'different':''}"><td><code>${esc(r.token)}</code></td><td>${esc(r.meaning)}</td></tr>`).join('')}${lesson.parsed.operators.map(op=>`<tr><td>${esc(op)}</td><td>${op==='|'?'将前一个命令的输出交给grep过滤。':op==='>'?'保存输出到虚拟文件，不写真实磁盘。':'虚拟输出文件路径。'}</td></tr>`).join('')}</tbody></table>${lesson.parsed.issues.length?'<div class="info-box warn">'+lesson.parsed.issues.map(esc).join('<br>')+'<br>本次没有执行负载或修改模拟状态。</div>':''}<h3>D · 本次输出怎么读</h3>${fields.length?fields.map(f=>`<div class="output-field"><b>${esc(f.field)}</b><pre>${esc(f.actual)}</pre><p>${esc(f.meaning)}</p></div>`).join(''):'<p>本次没有可解读的结果字段。先查看错误状态与参数，不用上一次测试结果冒充本次结果。</p>'}<h3>E · 实际工作场景</h3><p>${esc(lesson.usage)}</p><h3>常见错误</h3><p>${esc(lesson.mistake)}</p><h3>F · 工作表达</h3><p>${esc(lesson.interview)}</p><h3>G · 记忆口诀</h3><div class="info-box">${esc(lesson.mnemonic)}</div><div id="memory-check" class="memory-check"></div><button class="spaced" data-action="operation-followup">围绕本次操作做技术复盘 →</button>`;
-  if(lesson.origin){const source=SIT_COURSE.find(l=>l.id===lesson.origin.lessonId);host.querySelector('.lesson-command').insertAdjacentHTML('beforeend',`<small>来源：${esc(lesson.origin.projectId)} · ${source?esc(source.title):'自由操作/考核'}（按执行发起时归属）</small>`);}
+  $('coach-layout').classList.toggle('lesson-collapsed',c.hidden||exam);
+  $('lesson-toggle').textContent=c.hidden?'展开命令解析':'折叠命令解析';
+  $('lesson-toggle').disabled=exam;
+  if(exam){host.replaceChildren();return;}
+  if(!lesson){
+    host.innerHTML='<div class="empty-state"><h3>执行一条命令后从这里读结果</h3><p>查看命令查了什么、输出说明什么，以及下一步需要验证什么。</p></div>';
+    return;
+  }
+  const args=lesson.parsed.segments.flatMap(s=>s.parts);
+  const source=lesson.origin&&SIT_COURSE.find(l=>l.id===lesson.origin.lessonId);
+  const context=lesson.event?.seq?'记录 #'+lesson.event.seq+' · 启动 '+lesson.event.boot+' · '+lesson.at:lesson.at;
+  const evidence=lesson.fields.length?renderFieldRows(lesson.fields):renderFieldRows(lesson.secondary.slice(0,3));
+  const moreFields=lesson.fields.length?lesson.secondary:lesson.secondary.slice(3);
+  const kind=lesson.failed?'返回异常或未执行':'已返回结果';
+  const issues=lesson.parsed.issues.length?'<ul class="coach-issues">'+lesson.parsed.issues.map(issue=>'<li>'+esc(issue)+'</li>').join('')+'</ul>':'';
+  const related=source?' · '+source.title:'';
+  host.innerHTML=`<div class="lesson-command"><span>本次命令</span><code>${esc(lesson.raw)}</code><small>${esc(context+related)} · ${kind}</small></div>
+    <div class="coach-interpretation ${lesson.failed?'failure':''}"><b>${esc(lesson.headline)}</b><p>${esc(lesson.limits)}</p><p><strong>下一项验证</strong> ${esc(lesson.next)}</p></div>
+    ${lesson.effects?'<p class="coach-effects"><strong>状态变化</strong> '+esc(lesson.effects)+'</p>':''}
+    ${evidence?'<h3>本次输出怎么读</h3>'+evidence:lesson.output&&lesson.failed?'<div class="output-field"><b>原始返回</b><pre>'+esc(lesson.output)+'</pre></div>':''}
+    ${moreFields.length?'<details class="coach-detail"><summary>查看其余字段</summary>'+renderFieldRows(moreFields)+'</details>':''}
+    <details class="coach-detail" ${issues?'open':''}><summary>命令结构、参数与取值</summary><p>${esc(lesson.purpose)}</p>${issues}
+    <table><thead><tr><th>实际输入</th><th>作用与取值</th></tr></thead><tbody>${args.map(r=>`<tr class="${r.unsupported?'different':''}"><td><code>${esc(r.token)}</code></td><td>${esc(r.meaning)}</td></tr>`).join('')}${lesson.parsed.operators.map(op=>`<tr><td>${esc(op)}</td><td>${op==='|'?'传给后续 grep 筛选。':op==='>'?'输出到模拟文件。':'模拟目标文件。'}</td></tr>`).join('')}</tbody></table></details>
+    <details class="coach-detail coach-practice-more"><summary>记忆与技术复盘</summary><p>${esc(lesson.mnemonic)}</p><div id="memory-check" class="memory-check"></div><button class="spaced" data-action="operation-followup">练习相关追问 →</button></details>`;
   renderMemoryCheck();
 }
 
 function parameterQuiz(segment,flag,value){
   const cmd=segment.command,id=segment.key+':'+flag,v=String(value===true?'1':value);
   const numbered=n=>['(?<!\\d)'+n+'(?!\\d)'];
+  if(cmd==='iperf3'&&flag==='-c'){
+    return {id,parameter:true,prompt:'-c 后面的 '+v+' 指向哪一端？',answer:'要连接的服务端 IP。即使使用 -R，-c 指向的服务端也不变。',choices:['本机客户端的地址','要连接的服务端地址','网卡的默认网关'],correctChoice:1,groups:[['服务端']]};
+  }
   if(cmd==='fio'){
     const table={
       '--bs':['bs='+v+'代表什么？',v+'是单次I/O块大小（k/m采用KiB/MiB），不是文件大小。',[['单次','每次','请求块','块大小'],[v.toLowerCase(),String(parseFloat(v))]]],
@@ -202,7 +280,7 @@ function parameterQuiz(segment,flag,value){
   return {id,parameter:true,prompt:'本次'+flag+(value===true?'':' '+v)+'有什么作用？',answer:desc[0]+(desc[2]?' '+desc[2](value===true?null:v):''),groups:[clues[flag]||[phrase.slice(0,4),phrase.slice(2,6)]]};
 }
 function makeMemoryQuiz(lesson){
-  const s=lesson.parsed.segments[0];if(!s?.spec||lesson.failed||['help','clear','sim','save-logs','stop','reboot','pkill'].includes(s.command))return null;
+  const s=lesson.parsed.segments[0];if(!s?.spec||s.opts['--help']||lesson.failed||['help','clear','sim','save-logs','stop','reboot','pkill'].includes(s.command))return null;
   const params=Object.entries(s.opts).filter(([flag])=>s.spec.options?.[flag]);
   if(params.length){const selected=params.find(([flag])=>!S.coach.mastered[s.key+':'+flag])||params[S.coach.quizCycle++%params.length];return {...parameterQuiz(s,...selected),command:lesson.raw};}
   const defaults={
@@ -221,20 +299,35 @@ function makeMemoryQuiz(lesson){
   return {id:s.key+':output',parameter:false,prompt:item[0],answer:item[1],groups:item[2],command:lesson.raw};
 }
 function quizMatches(quiz,text){
+  if(quiz.choices)return String(quiz.correctChoice)===text.trim();
   const answer=text.trim().toLowerCase();if(answer.length<2)return false;
   if(/^(不懂|不知道|不会|随便|不知道什么意思)$/.test(answer))return false;
   return quiz.groups.every(group=>group.some(pattern=>new RegExp(pattern,'i').test(answer)));
 }
+function memoryAnswerInput(q,id){
+  if(!q.choices)return '<input id="'+id+'" aria-label="复盘回答" placeholder="先用自己的话回答，再对照解释">';
+  return '<select id="'+id+'" aria-label="选择回答"><option value="">请选择</option>'+q.choices.map((choice,i)=>'<option value="'+i+'">'+esc(choice)+'</option>').join('')+'</select>';
+}
 function renderMemoryCheck(){
   const host=$('memory-check');if(!host)return;const q=S.currentMemoryQuiz;
   if(!q){host.innerHTML='<p class="muted">本次先理解错误或执行状态，下一条正常命令再进行记忆检查。</p>';return;}
-  host.innerHTML=`<span class="tag">可跳过的记忆检查</span><h3>${esc(q.prompt)}</h3><input id="memory-answer" placeholder="用一句话回答，不必照抄术语" aria-label="命令记忆回答"><div class="inline-actions"><button data-action="check-memory" class="primary">检查回答</button><button data-action="skip-memory">暂时跳过</button></div><div id="memory-feedback" aria-live="polite"></div>`;
+  host.innerHTML=`<span class="tag">可跳过的记忆检查</span><h3>${esc(q.prompt)}</h3>${memoryAnswerInput(q,'memory-answer')}<div class="inline-actions"><button data-action="check-memory" class="primary">检查回答</button><button data-action="skip-memory">暂时跳过</button></div><div id="memory-feedback" aria-live="polite"></div>`;
 }
 function answerMemory(q,text,feedbackId){
   if(!text.trim()){toast('先写一句回答，或选择跳过。');return;}
+  if(!q.choices){
+    const feedback=$(feedbackId);
+    feedback.innerHTML='<div class="info-box">对照参考解释复核你的回答。<br><b>参考解释：</b>'+esc(q.answer)+'</div>';
+    if(feedbackId==='memory-feedback')feedback.insertAdjacentHTML('beforeend','<button data-action="memory-review-later" type="button">加入待复习</button>');
+    else feedback.insertAdjacentHTML('beforeend','<button data-action="memory-reviewed" data-review-id="'+esc(q.id)+'" type="button">我已对照订正</button>');
+    return;
+  }
   const correct=quizMatches(q,text),c=S.coach;
   if(correct){c.mastered[q.id]={at:stamp(),command:q.command,parameter:q.parameter};if(c.mistakes[q.id])c.mistakes[q.id].resolved=true;}
-  else c.mistakes[q.id]={...q,response:text,at:stamp(),resolved:false,attempts:(c.mistakes[q.id]?.attempts||0)+1};
+  else {
+    delete c.mastered[q.id];
+    c.mistakes[q.id]={...q,response:q.choices[Number(text)],at:stamp(),resolved:false,attempts:(c.mistakes[q.id]?.attempts||0)+1};
+  }
   persist();$(feedbackId).innerHTML=`<div class="info-box${correct?'':' warn'}">${correct?'已通过本次规则检查，记为已掌握。':'尚未覆盖关键含义，已记录到错题本。'}<br><b>正确解释：</b>${esc(q.answer)}<br><small>按知识点判定，不能完整理解所有同义表达；可改写后重答。</small></div>`;renderCoachStats();
 }
 function renderCoachStats(){
@@ -243,7 +336,7 @@ function renderCoachStats(){
 }
 function renderMistakes(){
   const c=S.coach,rows=Object.values(c.mistakes),remaining=Object.keys(c.learned).filter(key=>!Object.keys(c.mastered).some(id=>id.startsWith(key+':')));
-  $('mistake-board').innerHTML=`<div class="panel"><h2>命令记忆与复习</h2><p class="muted">已学习指实际执行并生成过解析；已掌握指通过本地知识点检查，不代表真实项目熟练度。可选检查不会阻止继续操作。</p><div class="info-box">待巩固命令：${remaining.map(esc).join('、')||'暂无'}<br>需要复习：${rows.filter(q=>!q.resolved).map(q=>esc(q.prompt)).join('；')||'暂无未订正错题'}</div></div>${rows.map((q,i)=>`<div class="panel spaced"><div class="panel-title"><h2>${esc(q.prompt)}</h2><span class="tag">${q.resolved?'已订正':'待复习'}</span></div><div class="code-preview">${esc(q.command)}</div><p class="muted">上次回答：${esc(q.response)} · 错答次数${q.attempts}</p><input id="review-answer-${i}" placeholder="重新用自己的话回答"><button class="spaced" data-review="${esc(q.id)}" data-review-index="${i}">再次检查</button><div id="review-feedback-${i}"></div><details class="spaced"><summary>需要时再看正确解释</summary><p>${esc(q.answer)}</p></details></div>`).join('')}`;
+  $('mistake-board').innerHTML=`<div class="panel"><h2>命令记忆与复习</h2><p class="muted">已学习指实际执行并生成过解析；已掌握指通过本地知识点检查，不代表真实项目熟练度。可选检查不会阻止继续操作。</p><div class="info-box">待巩固命令：${remaining.map(esc).join('、')||'暂无'}<br>需要复习：${rows.filter(q=>!q.resolved).map(q=>esc(q.prompt)).join('；')||'暂无未订正错题'}</div></div>${rows.map((q,i)=>`<div class="panel spaced"><div class="panel-title"><h2>${esc(q.prompt)}</h2><span class="tag">${q.resolved?'已订正':'待复习'}</span></div><div class="code-preview">${esc(q.command)}</div><p class="muted">上次回答：${esc(q.response)} · 错答次数${q.attempts}</p>${memoryAnswerInput(q,'review-answer-'+i)}<button class="spaced" data-review="${esc(q.id)}" data-review-index="${i}">再次检查</button><div id="review-feedback-${i}"></div><details class="spaced"><summary>需要时再看正确解释</summary><p>${esc(q.answer)}</p></details></div>`).join('')}`;
 }
 
 function assessmentActive(){return !!S.coach?.exam?.active;}
@@ -252,27 +345,30 @@ function renderWorkMode(){
   const exam=assessmentActive(),lesson=SIT_COURSE.find(l=>l.id===S.academy.activeLesson);document.body.classList.toggle('assessment-active',exam);document.body.classList.toggle('free-practice',!lesson&&!exam);
   $('lesson-toggle').disabled=exam;$('session-kind').textContent=exam?'独立考核':lesson?'课程实训':'自由实训';
   $('work-task').innerHTML=exam?'<span class="tag">独立考核</span><b>按任务书独立执行，交卷前隐藏教学解析</b><button data-go="assessment">返回考核任务书</button>':lesson?academyPracticeCard():'<span class="tag">自由实训</span><b>当前未绑定课程，操作记录只进入本工程</b><p>可以自由使用工具；要计入课程产物，请先从学习路径开始该课任务。</p><button data-go="academy">选择学习任务</button>';
+  const practice=currentPractice();
+  if(practice)$('session-kind').textContent=S.page==='lesson'?'本课模拟终端':'案例模拟终端';
+  $('command').placeholder=practice?'输入命令，按 Enter 执行':'输入命令，如 lscpu，然后按 Enter';
   renderCoachStats();
 }
 function afterCommand(raw,output,parsed,failed,underLoad,operationContext){
-  const c=S.coach,seg=parsed.segments[0],event={projectId:operationContext.projectId,lessonId:operationContext.lessonId,attemptId:operationContext.attemptId,loadId:operationContext.loadId,seq:++c.seq,raw,at:stamp(),command:seg?.command||'',key:seg?.key||'',opts:seg?.opts||{},failed,issues:parsed.issues,output,underLoad,kind:'command'};
+  const c=S.coach,seg=parsed.segments[0],event={environment:operationContext.environment,environmentKey:operationContext.environmentKey,projectId:operationContext.projectId,lessonId:operationContext.lessonId,attemptId:operationContext.attemptId,loadId:operationContext.loadId,seq:++c.seq,raw,at:stamp(),command:seg?.command||'',key:seg?.key||'',opts:seg?.opts||{},failed,helpOnly:Boolean(seg?.opts['--help']),fromB:seg?.fromB,issues:parsed.issues,output,underLoad,kind:'command'};
   if(seg?.command==='fio'&&!failed&&S.lastFio)event.fio=S.lastFio;
   if(seg?.command==='iperf3'&&!failed&&!seg.opts['-s']&&S.lastNet)event.net=S.lastNet;
   c.events.push(event);storeCourseEvent(event);if(c.events.length>300)c.events.shift();
-  S.lastLesson=lessonForRun(raw,output,parsed,failed);
+  S.lastLesson=lessonForRun(raw,output,parsed,failed,S.lastCoreResult?.raw===raw?S.lastCoreResult:null);
   S.lastLesson.origin={projectId:operationContext.projectId,lessonId:operationContext.lessonId};
   if(!assessmentActive()){
-    if(seg?.spec&&!failed)c.learned[seg.key]={at:stamp(),last:raw};
+    if(seg?.spec&&!failed&&!event.helpOnly)c.learned[seg.key]={at:stamp(),last:raw};
     S.currentMemoryQuiz=makeMemoryQuiz(S.lastLesson);
   }
   persist();renderCommandLesson();renderWorkMode();if(S.page==='mistakes')renderMistakes();
 }
 function allowWorkPage(page){return !assessmentActive()||['project','terminal','bugs','assessment'].includes(page);}
 function startAssessment(){
-  if(assessmentActive())return;const previousCourse=S.academy.activeLesson||(S.coach.exam?.previousProject?S.coach.exam.previousCourse:null);stopStress();endScenario();S.academy.activeLesson=null;
+  if(assessmentActive())return;const previousCourse=S.academy.activeLesson||(S.coach.exam?.previousProject?S.coach.exam.previousCourse:null);stopStress();const previousSession=S.coach.exam?.previousSession||sessionSnapshot();endScenario();S.academy.activeLesson=null;
   const c=S.coach,previousProject=c.exam?.previousProject||S.project;c.mode='assessment';c.hidden=false;
   if(c.exam?.result){c.examHistory=c.examHistory||[];c.examHistory.push({projectId:c.exam.projectId,started:c.exam.started,result:c.exam.result});}
-  c.exam={previousCourse,active:true,started:stamp(),startSeq:c.seq,previousProject,responses:{},analysis:'',advice:'',injected:false,fixed:false,faultEvidence:[],snapshot:null,result:null};
+  c.exam={previousCourse,previousSession,active:true,started:stamp(),startSeq:c.seq,previousProject,responses:{},analysis:'',advice:'',injected:false,fixed:false,faultEvidence:[],snapshot:null,result:null};
   S.project={id:'ASSESS-'+Date.now(),started:stamp(),observations:{},fio:[],network:[],stress:[],cases:[],reportAt:null};c.exam.projectId=S.project.id;S.report=null;S.localServer=false;S.peerServer=false;S.freeMode=true;
   $('bug-scene').innerHTML='<option value="">尚未领取故障工单</option>';persist();renderWorkMode();renderCommandLesson();showPage('assessment');toast('独立考核已开始，原项目已保留。');
 }
@@ -291,7 +387,7 @@ function renderAssessmentBoard(targetId='project-board'){
   $(targetId).innerHTML=`<div class="panel project-intro"><span class="tag">INDEPENDENT ASSESSMENT</span><h2>银河麒麟V10兼容性与稳定性 · 独立项目考核</h2><p class="muted">只评本轮新工程：${esc(S.project.id)}。原项目保留。当前已记录${S.coach.seq-exam.startSeq}次命令操作。${exam.restoreWarning?'<br>'+exam.restoreWarning:''}</p><div class="info-box">任务：确认硬件/系统/固件环境，完成基础巡检、五类磁盘负载、双机TCP/UDP、CPU+内存压力与监控；领取并定位故障，提交Bug、应用修复、回归；提交基于实际结果的报告。<br>验收范围：测试盘4K随机读基线38000–45000IOPS（libaio/深度16/单作业/direct1/1G/60秒持续模式），千兆TCP≥900Mbps、Retr≤10；UDP关注丢包与抖动；压力至少60模拟秒且有资源/日志监控。这里不给执行命令或排查答案。</div><div class="inline-actions"><button class="primary" data-go="terminal">进入终端独立操作</button><button data-action="inject-exam-fault" ${exam.injected?'disabled':''}>${exam.injected?'已领取故障工单':'领取故障工单'}</button><button data-go="bugs">填写Bug与回归</button></div></div><div class="panel spaced"><h2>输出理解记录</h2><p class="muted">填写你从本轮实际输出读到的事实与含义。交卷后才显示核对结果；只输入命令不会自动得到理解分。</p>${[['cpu','CPU(s)的数值与含义，和物理核心数有何区别？'],['memory','内存total是多少？available为什么不同于free？'],['speed','本次Speed是多少、代表什么？Full和Link detected=yes是否证明吞吐正常？'],['fio','IOPS、BW、块大小怎样关联？P99是否是最大延迟？'],['udp','本次UDP的Lost%与Jitter分别说明什么？']].map(([key,label])=>`<label>${label}<textarea data-exam-response="${key}" rows="2">${esc(exam.responses[key]||'')}</textarea></label>`).join('')}</div><div class="panel spaced"><h2>工单结论与处理建议</h2><p class="muted">${exam.injected?esc(scenarios[exam.caseId].desc):'先完成基础与性能任务，再领取故障工单。'}</p><label>基于哪些输出，定位到什么原因？<textarea data-exam-text="analysis" rows="3">${esc(exam.analysis)}</textarea></label><label>处理建议与修复后验证方法<textarea data-exam-text="advice" rows="2">${esc(exam.advice)}</textarea></label><div class="inline-actions"><button data-action="generate-report">记录本轮测试报告</button><button class="primary" data-action="finish-assessment">交卷并统一评分</button></div><p class="muted">未完成也可以交卷，会标注遗漏与未执行，不会默认通过。交卷前不展示解析、参考答案或评分过程。</p></div>`;
 }
 function gradeAssessment(){
-  const exam=S.coach.exam,p=S.project,events=S.coach.events.filter(e=>e.seq>exam.startSeq&&e.projectId===(exam.projectId||S.project.id)),valid=events.filter(e=>!e.failed),details=[];
+  const exam=S.coach.exam,p=currentProjectData(),events=S.coach.events.filter(e=>e.seq>exam.startSeq&&e.projectId===(exam.projectId||S.project.id)),valid=events.filter(e=>!e.failed),details=[];
   function item(name,got,max,missing){details.push({name,got:Math.round(got*10)/10,max,missing});}
   const env=ENV_CHECKS.filter(([key])=>p.observations[key]?.ok);item('环境确认',15*env.length/ENV_CHECKS.length,15,ENV_CHECKS.filter(([key])=>!p.observations[key]?.ok).map(([,label])=>label));
   const basic=BASIC_CHECKS.filter(([key])=>p.observations[key]?.ok);item('基础检查',10*basic.length/BASIC_CHECKS.length,10,BASIC_CHECKS.filter(([key])=>!p.observations[key]?.ok).map(([,label])=>label));
@@ -334,28 +430,39 @@ function failedSimulation(parsed,output){
 }
 function workVerdict(state,index){
   if(state==='已完成'||state==='已生成')return 'PASS';if(state==='未执行'||state==='未生成')return 'NOT RUN';
-  const item=index===2?S.project.fio.at(-1):index===3?S.project.network.at(-1):null;
+  const item=index===2?(latestDiskBaseline()?.error?latestDiskBaseline():['read','write','randread','randwrite','mixed'].map(latestDiskMode).find(run=>run?.error)):index===3?S.project.network.at(-1):null;
   if(item?.error&&/refused|Network is down|No carrier|unreachable|No such device|not mounted|未挂载|Cannot assign/i.test(item.output))return 'BLOCKED';
   return state==='发现异常'?'FAIL':'BLOCKED';
 }
 function detailedResultRows(){
-  const p=S.project,rows=[];
+  const p=currentProjectData(),rows=[];
   for(const mode of ['read','write','randread','randwrite','mixed']){
-    const r=p.fio.filter(r=>mode==='mixed'?['rw','randrw'].includes(r.config.rw):r.config.rw===mode).at(-1);
+    const r=latestDiskMode(mode);
     rows.push(['fio '+mode,!r?'NOT RUN':r.error?/No such|not mounted|未挂载/.test(r.output)?'BLOCKED':'FAIL':'PASS',!r?'没有实际执行记录':r.error?r.output:'负载已完成；'+r.iops+' IOPS / '+r.bw+'MiB/s。不同模式性能仅记录，未声明基线时不作性能通过结论。']);
   }
+  const baseline=latestDiskBaseline();
+  rows.push(['fio 4K 随机读基线',!baseline?'NOT RUN':baseline.error&&/No such|not mounted|未挂载/.test(baseline.output)?'BLOCKED':baselinePass(baseline)?'PASS':'FAIL',!baseline?'未执行可比较的基线作业':baseline.error?baseline.output:baseline.iops+' IOPS / 教学范围 38,000–45,000 IOPS / '+(baseline.scene||'正常环境')+' v'+baseline.version]);
   for(const udp of [false,true]){const r=p.network.filter(r=>r.udp===udp&&!r.local).at(-1);rows.push(['iperf3 '+(udp?'UDP':'TCP'),!r?'NOT RUN':r.error?'BLOCKED':udp?r.loss===0?'PASS':'FAIL':r.throughput>=900&&r.retrans<=10?'PASS':'FAIL',!r?'未取得接收结果':r.error?r.output:r.output]);}
   return rows;
 }
 function handleCoachClick(b){
   const action=b.dataset.action;
   if(action==='check-memory'){answerMemory(S.currentMemoryQuiz,$('memory-answer').value,'memory-feedback');return true;}
+  if(action==='memory-review-later'){
+    const q=S.currentMemoryQuiz,c=S.coach,prior=c.mistakes[q.id];
+    c.mistakes[q.id]={...q,response:$('memory-answer').value,at:stamp(),resolved:false,attempts:(prior?.attempts||0)+1};
+    persist();renderCoachStats();b.textContent='已加入待复习';b.disabled=true;return true;
+  }
+  if(action==='memory-reviewed'){
+    const q=S.coach.mistakes[b.dataset.reviewId];if(q){q.resolved=true;persist();renderMistakes();renderCoachStats();}
+    return true;
+  }
   if(action==='skip-memory'){$('memory-feedback').innerHTML='<p class="muted">本次已跳过，不计为已掌握，也不计错题。</p>';return true;}
   if(b.dataset.review){const q=S.coach.mistakes[b.dataset.review],index=b.dataset.reviewIndex;answerMemory(q,$('review-answer-'+index).value,'review-feedback-'+index);return true;}
   if(action==='start-assessment'){startAssessment();return true;}
   if(action==='inject-exam-fault'){injectAssessmentFault();return true;}
   if(action==='finish-assessment'){finishAssessment();return true;}
-  if(action==='restore-project'){if(!assessmentActive()&&S.coach.exam?.previousProject){stopStress();endScenario();S.project=S.coach.exam.previousProject;S.coach.exam.previousProject=null;S.academy.activeLesson=S.coach.exam.previousCourse||null;S.report=null;persist();refresh();toast('已恢复考核前项目；考核成绩仍保留。');}return true;}
+  if(action==='restore-project'){if(!assessmentActive()&&S.coach.exam?.previousProject){stopStress();endScenario();S.project=S.coach.exam.previousProject;S.coach.exam.previousProject=null;S.academy.activeLesson=S.coach.exam.previousCourse||null;S.report=null;restoreSession(S.coach.exam.previousSession);S.coach.exam.previousSession=null;persist();refresh();toast('已恢复考核前项目；考核成绩仍保留。');}return true;}
   if(action==='operation-followup'){
     const s=S.lastLesson?.parsed.segments[0];if(!s)return true;const category=['fio','iperf3'].includes(s.command)?s.command:['stress','stress-ng'].includes(s.command)?'stress':'Linux 基础';
     S.operationFollowups=operationFollowups(S.lastLesson);S.operationCommand=S.lastLesson.raw;S.followup=0;$('interview-category').value=category;S.q=questions.findIndex((_,i)=>questionCategory(i)===category);renderQuestion();showPage('interview');return true;

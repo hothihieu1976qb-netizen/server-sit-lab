@@ -1,0 +1,6 @@
+# Local source material and machine-specific checks are not part of the release.
+*.docx
+*.cjs
+/preview.png
+.DS_Store
+Thumbs.db

@@ -3,6 +3,9 @@
 const $ = id => document.getElementById(id);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const navItems = [
+  ['home','◫','学习课程',''],
+  ['lesson','◫','同页实训',''],
+  ['cases','◇','工作问题复现',''],
   ['assessment','◎','独立考核','在单独工程检验操作、分析和交付，交卷后统一复盘。'],
   ['academy','◫','学习路径','以中级SIT工作方法为目标，按任务学习、实操、提交产物与复盘。'],
   ['project','◉','工程与报告','银河麒麟 V10 服务器兼容性与稳定性测试项目 · 八阶段实训'],
@@ -20,23 +23,24 @@ const navItems = [
   ['reference','≡','命令手册','常用命令与核心参数，一查就能接着练。']
 ];
 const NAV_GROUPS=[
- ['study','◫','学习路径','academy',['academy']],
- ['work','›_','实训工作台','terminal',['terminal','overview','hardware','fio','network','stress','faults']],
- ['delivery','▤','项目交付','project',['project','bugs']],
- ['review','≡','复习资料','mistakes',['mistakes','interview','reference','learning']],
- ['exam','◎','独立考核','assessment',['assessment']]
+ ['study','◫','学习课程','home',['home','lesson','academy']],
+ ['work','›_','实验室','cases',['cases','terminal','overview','hardware','fio','network','stress','faults']],
+ ['review','▤','我的学习','mistakes',['mistakes','reference','learning','project','bugs','assessment','interview']]
 ];
 function renderNavigation(){
  const group=NAV_GROUPS.find(g=>g[4].includes(S.page))||NAV_GROUPS[0];
- $('nav').innerHTML=NAV_GROUPS.map(([id,icon,label,landing])=>`<button data-go="${landing}" title="${label}" aria-label="${label}" class="${id===group[0]?'active':''}" ${id===group[0]?'aria-current="page"':''}><span class="nav-icon">${icon}</span><span class="nav-text">${label}</span></button>`).join('');
- $('section-tabs').hidden=group[4].length===1;
- $('section-tabs').innerHTML=group[4].map(id=>{const item=navItems.find(n=>n[0]===id);return `<button data-go="${id}" class="${S.page===id?'active':''}" ${S.page===id?'aria-current="page"':''}>${item[2]}</button>`;}).join('');
- $('crumb').textContent=group[2]+(group[4].length>1?' / '+navItems.find(n=>n[0]===S.page)[2]:'');
+ $('nav').innerHTML=NAV_GROUPS.map(([id,icon,label,landing])=>`<button data-go="${landing}" title="${label}" aria-label="${label}" class="${id===group[0]?'active':''}" ${id===group[0]?'aria-current="page"':''}><span class="nav-icon">${studioIcon({study:'layers',work:'flask-conical',review:'chart-no-axes-combined'}[id])}</span><span class="nav-text">${label}</span>${id==='study'?'<span class="nav-count">'+GUIDED_COURSES.length+'</span>':''}</button>`).join('');
+ const visibleTabs=assessmentActive()?['assessment','terminal','project','bugs']:group[4].filter(id=>id!=='lesson');
+ $('section-tabs').hidden=['home','lesson','cases'].includes(S.page);
+ $('section-tabs').innerHTML=visibleTabs.map(id=>{const item=navItems.find(n=>n[0]===id);return `<button data-go="${id}" class="${S.page===id?'active':''}" ${S.page===id?'aria-current="page"':''}>${item[2]}</button>`;}).join('');
+ const pageName=navItems.find(n=>n[0]===S.page)[2];
+ $('crumb').textContent=group[2]+(pageName===group[2]?'':' / '+pageName);
 }
 let stored = {};
 try { stored = JSON.parse(localStorage.getItem('sit-lab-v1') || '{}'); } catch (_) {}
 const S = {
   ui:stored.ui||{courseStep:1,openStage:null},
+  experience:readPracticeStore(stored.experience), activePracticeTerminal:null,
   academy:stored.academy || {selected:null,activeLesson:null,records:{},pace:'task'},
   coach:stored.coach || {mode:'guided',hidden:false,learned:{},mastered:{},mistakes:{},events:[],seq:0,quizCycle:0,guided:0,guideSince:0,workHint:false,exam:null},
   lastLesson:null,currentMemoryQuiz:null,operationFollowups:null,
@@ -52,22 +56,61 @@ const S = {
 };
 let toastTimer;
 function toast(message) { $('toast').textContent=message; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3200); }
+let persistTimer;
 function persist() {
+  clearTimeout(persistTimer);persistTimer=setTimeout(flushProjectStore,60);
+}
+function flushProjectStore() {
+  clearTimeout(persistTimer);
   syncCoachSnapshot();syncActiveCourseArtifacts();
-  try { localStorage.setItem('sit-lab-v1',JSON.stringify({bugs:S.bugs,completed:S.completed,practiced:S.practiced,answers:S.answers,q:S.q,project:S.project,coach:S.coach,academy:S.academy,ui:S.ui})); }
-  catch (_) { toast('浏览器未允许本地保存；当前会话可继续，建议导出 Bug。'); }
+  try { localStorage.setItem('sit-lab-v1',JSON.stringify({bugs:S.bugs,completed:S.completed,practiced:S.practiced,answers:S.answers,q:S.q,project:S.project,coach:S.coach,academy:S.academy,ui:S.ui,experience:practiceStoreReady?undefined:S.experience,session:sessionSnapshot()})); }
+  catch (_) { toast('浏览器未能保存本次进度。可先导出案例或学习记录。'); }
+}
+window.addEventListener('pagehide',flushProjectStore);
+function sessionSnapshot(){
+  const keys=['scene','fixed','regression','boot','ioError','netFault','stressFault','simTime','resourceMessages','captures','saved','freeMode','hints','explanation','diagnosisMessage','localServer','peerServer','localPort','peerPort','report','regressionEnvironment'];
+  return {projectId:S.project.id,...Object.fromEntries(keys.map(key=>[key,S[key]])),evidence:[...S.evidence],stressInterrupted:Boolean(S.stress)};
+}
+function restoreSession(snapshot){
+  if(snapshot?.projectId!==S.project.id)return;
+  const {projectId,evidence,stressInterrupted,...state}=snapshot;
+  Object.assign(S,state,{evidence:new Set(evidence)});
+  $('scene-select').value=S.scene||$('scene-select').options[0]?.value;
+  if(S.scene)$('bug-scene').value=S.scene;
+  $('free-mode').checked=S.freeMode;
+  $('net-fault').value=S.netFault;
+  $('stress-fault').value=S.stressFault;
+  if(S.scene&&S.captures.length){
+    $('terminal-output').replaceChildren();
+    for(const capture of S.captures){
+      appendTerminal('student@sit-server:~$ '+capture.command,'prompt');
+      if(capture.output)appendTerminal(capture.output);
+    }
+  }
+  if(S.project.engine?.machine.load){
+    S.stress=S.project.engine.activeStress||{...S.project.engine.machine.load,command:'stress (restored workload)',at:stamp(),peakCPU:0,peakMemory:0,peakSwap:0};
+    coreStopStress('page-reload');
+  }
+  if(stressInterrupted)$('stress-log').textContent='页面刷新结束了此前的压力作业，请重新启动作业再采样。';
+  updateResourceState();
 }
 function practice(key) { if (!S.practiced.includes(key)) { S.practiced.push(key); persist(); } }
 function fault(id) { return S.scene===id && !S.fixed; }
 function note(key) { if(S.scene) S.evidence.add(key); }
 function showPage(id,updateHash=true){
   if(!allowWorkPage(id)){id='terminal';toast('考核中只开放终端、交付和任务书；交卷后再查看教学资料。');}
-  const item=navItems.find(n=>n[0]===id)||navItems.find(n=>n[0]==='academy');S.page=item[0];
+  if(['lesson','cases'].includes(id)&&(S.busy.fio||S.busy.network)){toast('当前模拟测试正在收尾，结束后即可切换。');return;}
+  if(id==='lesson'&&!getGuidedRun()){startGuided();return;}
+  const item=navItems.find(n=>n[0]===id)||navItems.find(n=>n[0]==='home');S.page=item[0];
+  document.body.classList.toggle('learning-experience',['home','lesson','cases'].includes(S.page));
   document.querySelectorAll('.view').forEach(view=>view.hidden=view.id!=='view-'+S.page);
   $('page-title').textContent=item[2];$('page-desc').textContent=item[3];$('eyebrow').textContent='SIT LEARNING WORKSPACE';
   if(updateHash&&location.hash!=='#'+S.page)history.replaceState(null,'','#'+S.page);
-  refresh();renderNavigation();
+  practiceTerminal(S.page);
+  if(['home','lesson','cases'].includes(S.page))renderWorkMode();else refresh();
+  renderNavigation();renderExperiencePage();
   if(S.page==='academy')renderAcademy();if(S.page==='mistakes')renderMistakes();if(S.page==='terminal')$('command').focus();
+  renderKernelWorkbench();studioPageChanged();
 }
 function appendTerminal(text, kind='') {
   const line=document.createElement('pre'); line.className=kind; line.textContent=text; $('terminal-output').appendChild(line);
@@ -75,7 +118,7 @@ function appendTerminal(text, kind='') {
 }
 function record(command, output,valid=true) {
   if(valid)trackProjectCommand(command,output);
-  const capture={command,output,time:new Date().toLocaleTimeString('zh-CN',{hour12:false})};
+  const capture={...evidenceEnvironment(),command,output,time:new Date().toLocaleTimeString('zh-CN',{hour12:false})};
   S.transcript.push(capture); if(S.transcript.length>100)S.transcript.shift();
   if(S.scene){S.captures.push(capture);if(S.captures.length>70)S.captures.shift();}
 }
@@ -187,110 +230,50 @@ function diskOutput(full=false,columns=false) {
   if(!storageState().present)return system+'\n[模拟] 未发现其他块设备。';
   return system+(full?'\nsdb\n└─sdb1 ext4   sit   SIM-TEST-01  '+(mounted?'/mnt/sit':''):'\nsdb    240G SimSSD240      disk\n└─sdb1 240G                part '+(mounted?'/mnt/sit':''));
 }
-function ipOutput(args,peer=false) {
-  const cmd=args.join(' '),brief=args.includes('-br'),n=peer?{missing:false,up:true,carrier:true,ip:'192.168.10.20',route:true,speed:1000}:networkState(),iface=peer?'enp4s0':'enp3s0';
+function ipOutput(args,peer=false,override=null,collect=true) {
+  const cmd=args.join(' '),brief=args.includes('-br'),n=override||(peer?{missing:false,up:true,carrier:true,ip:'192.168.10.20',route:true,speed:1000}:networkState()),iface=peer?'enp4s0':'enp3s0';
+  if(n.customRoute&&cmd.includes('neigh'))return args.includes('-br')?'':(n.neighbor||'');
+  if(n.customRoute&&cmd.includes('route')){
+    if(!n.ip)return '';
+    return (!n.route?`192.168.10.20 via 192.168.10.254 dev ${iface}\n`:'')+`${n.subnet} dev ${iface} proto kernel scope link src ${n.ip}${n.up?'':' linkdown'}`;
+  }
   if(cmd.includes('neigh'))return !n.ip?'':`192.168.10.${peer?'10':'20'} dev ${iface} ${n.up&&n.carrier?'lladdr 02:51:54:00:10:20 REACHABLE':'FAILED'}`;
   if(cmd.includes('route')){note('route');return n.missing||!n.ip?'':`${n.route?'default via 192.168.10.1 dev '+iface:'192.168.10.20 via 192.168.10.254 dev '+iface}\n192.168.10.0/24 dev ${iface} src ${n.ip}`;}
   const state=n.up&&n.carrier?'UP':'DOWN',flags='BROADCAST,MULTICAST'+(n.up?',UP':'')+(n.carrier?',LOWER_UP':'');
-  if(cmd.includes('addr')){note('address');return brief?'lo UNKNOWN 127.0.0.1/8'+(n.missing?'':`\n${iface} ${state} ${n.ip?n.ip+'/24':''}`):'1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536\n    inet 127.0.0.1/8 scope host lo'+(n.missing?'':`\n2: ${iface}: <${flags}> mtu 1500 state ${state}`+(n.ip?`\n    inet ${n.ip}/24 scope global ${iface}`:''));}
-  note('interface');if(brief)return 'lo UNKNOWN 00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP>'+(n.missing?'':`\n${iface} ${state} 02:51:54:00:10:${peer?'20':'10'} <${flags}>`);
+  if(cmd.includes('addr')){if(collect)note('address');return brief?'lo UNKNOWN 127.0.0.1/8'+(n.missing?'':`\n${iface} ${state} ${n.ip?n.ip+'/'+(n.prefix??24):''}`):'1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536\n    inet 127.0.0.1/8 scope host lo'+(n.missing?'':`\n2: ${iface}: <${flags}> mtu 1500 state ${state}`+(n.ip?`\n    inet ${n.ip}/${n.prefix??24} scope global ${iface}`:''));}
+  if(collect)note('interface');if(brief)return 'lo UNKNOWN 00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP>'+(n.missing?'':`\n${iface} ${state} 02:51:54:00:10:${peer?'20':'10'} <${flags}>`);
   let out='1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN';if(n.missing)return out;
   out+=`\n2: ${iface}: <${flags}> mtu 1500 state ${state}\n    link/ether 02:51:54:00:10:${peer?'20':'10'}`;
-  if(args.includes('-s'))out+=`\n    RX: bytes packets errors dropped\n        84000000 72500 ${S.netFault==='cable'?128:0} ${S.netFault==='udploss'?320:0}\n    TX: bytes packets errors dropped\n        63000000 55000 ${S.netFault==='retrans'?48:0} 0`;return out;
+  if(args.includes('-s')){const counters=n.stats||{rxBytes:0,txBytes:0,rxPackets:0,txPackets:0,rxDropped:0};out+=`
+    RX: bytes packets errors dropped
+        ${counters.rxBytes} ${counters.rxPackets} ${n.rxErrors||0} ${counters.rxDropped}
+    TX: bytes packets errors dropped
+        ${counters.txBytes} ${counters.txPackets} 0 0`;}return out;
 }
-function logs(previous=false,service=false) {
-  if(service){note('current');return fault('service')?'sit-agent.service: Main process exited, status=2/INVALIDARGUMENT\nsit-agent: invalid port "abc" in /etc/sit-agent.conf':'sit-agent: configuration valid\nsit-agent: listening on 0.0.0.0:9090\nsit-agent.service: Started successfully.';}
-  if(previous)return '[上次启动 / 模拟] simnic: firmware loaded, enp3s0 registered\nLink is Up 1000 Mbps Full Duplex\n'+(S.scene==='netpersist'?'ip: temporary address 192.168.10.10/24 applied; not persisted':'simhba: controller ready; sdb online');
-  const n=networkState();let out='[本次启动 / 模拟] Linux 4.19.90-sit.sim\n';
-  out+=fault('bootdriver')?'simhba: version magic mismatch; invalid module format; HBA probe unavailable\n':'simhba: controller ready; sda on independent boot controller; sdb online\n';
-  out+=fault('nic')?'simnic: failed to load firmware simnic-fw.bin (-2); probe failed with error -2\n':fault('driver')?'module loader: simnic is blacklisted, automatic loading skipped\n':`simnic: firmware loaded; enp3s0 registered\nsimnic enp3s0: ${n.carrier?'Link is Up '+n.speed+' Mbps Full Duplex':'Link is Down; carrier lost'}\n`;
-  if(!n.up&&!n.missing)out+='NetworkManager: enp3s0 administratively DOWN\n';
-  if(!n.ip&&!n.missing)out+='NetworkManager: no IPv4 configuration for enp3s0\n';
-  if(!n.route&&n.ip)out+='network: host route 192.168.10.20 via 192.168.10.254 selected\n';
-  if(fault('mount'))out+='systemd: /mnt/sit mount failed: UUID=SIM-TEST-99 not found\n';
-  if(fault('full'))out+='fio: write failed: No space left on device (ENOSPC), /mnt/sit\n';
-  if(fault('slowdown'))out+='sim-backup: background backup running on sdb\n';
-  if(S.ioError)out+='simhba: command timeout, tag=28\nsimhba: controller reset requested\nblk_update_request: I/O error, dev sdb, sector 4096\nEXT4-fs warning (sdb1): I/O submission failed\n';
-  if(fault('service'))out+='sit-agent.service: failed with exit-code; see journalctl -u sit-agent -b\n';
-  if(S.netFault==='retrans')out+='TCP: retransmission counter rising on test path\n';
-  if(S.netFault==='udploss')out+='network: receive queue drops increased during UDP test\n';
-  if(S.stress)out+=`stress: running cpu=${S.stress.cpu} vm=${S.stress.vm} requested=${S.stress.memMiB}MiB io=${S.stress.io||0} elapsed=${S.stress.elapsed}s\n`;
-  out+=S.resourceMessages.join('\n');
-  if(S.fixed)out+='\n[模拟修复版1.1已加载；请依据本次实际复测结果判断]';
-  return out+'\n[以上均为虚构教学日志]';
-}
+function logs(previous=false,service=false,kernelOnly=false) { return coreLogs(previous,service,kernelOnly); }
 function getFioConfig(opts) {
   return {name:String(opts['--name']||'sit-test'),groupReporting:opts['--group_reporting']!==undefined&&opts['--group_reporting']!=='0',target:String(opts['--filename']||'/mnt/sit/test.bin'),bs:String(opts['--bs']||'4k').toLowerCase(),rw:String(opts['--rw']||'randread'),depth:Number(opts['--iodepth']||1),runtime:Number(opts['--runtime']||60),direct:Number(opts['--direct']??1),mix:Number(opts['--rwmixread']??70),engine:String(opts['--ioengine']||'libaio'),size:String(opts['--size']||'1G'),jobs:Number(opts['--numjobs']||1),timeBased:opts['--time_based']!==undefined&&opts['--time_based']!=='0'};
 }
 function isBaseline(c) { return c.target==='/mnt/sit/test.bin'&&c.bs==='4k'&&c.rw==='randread'&&c.depth===16&&c.engine==='libaio'&&c.direct===1&&c.runtime===60&&sizeMiB(c.size)===1024; }
-async function runFio(args) {
-  if(S.busy.fio)return 'fio: 已有模拟作业在运行。';
-  let opts=options(args);const job=args.find(a=>a.endsWith('.fio')&&!a.startsWith('-'));
-  if(job){if(!['/mnt/sit/low.fio','/mnt/sit/fixed.fio'].includes(job))return 'fio: 虚拟作业不存在。';opts=options(tokens(job.endsWith('low.fio')?lowCommand:baselineCommand).slice(1));note('fioparams');}
-  const c=getFioConfig(opts),blockMiB=sizeMiB(c.bs),size=sizeMiB(c.size);
-  if(c.rw==='trim')return 'fio: trim 仅展示概念（向支持设备发出丢弃/TRIM请求），本教学模型不实现 TRIM 负载或性能结论。';
-  if(!['/mnt/sit/test.bin','/root/test.bin'].includes(c.target))return 'fio: 只允许虚拟测试文件，不支持真实路径或裸设备。';
-  if(!blockMiB||!size||size>65536||!['read','write','randread','randwrite','randrw','rw'].includes(c.rw)||!numberIn(c.depth,1,128)||!Number.isInteger(c.depth)||!numberIn(c.jobs,1,16)||!Number.isInteger(c.jobs)||!numberIn(c.runtime,1,3600)||numberIn(c.mix,0,100)===null||![0,1].includes(c.direct)||!['sync','libaio'].includes(c.engine))return 'fio: 参数无效；iodepth 1–128、numjobs 1–16，size 至多64G、runtime 1–3600。';
-  const testDisk=c.target.startsWith('/mnt/sit/'),disk=storageState(),error=testDisk?(!disk.present?'No such device':!disk.mounted?'测试盘未挂载（本模拟拒绝误写系统盘目录）':disk.full?'No space left on device':S.ioError?'Input/output error':null):null;
-  if(error){const r={id:Date.now(),at:stamp(),scene:S.scene,version:S.fixed?'1.1':'1.0',error:true,config:c,output:'fio: err=5, '+error};S.lastFio=r;S.project.fio.push(r);persist();$('fio-result').innerHTML='<pre class="light-log">'+esc(r.output)+'</pre>';return r.output;}
-  S.busy.fio=true;const generation=S.generation;$('fio-result').innerHTML='<div class="loading"><i class="spinner"></i>正在生成模拟 I/O 结果…</div>';refreshButtons();
-  await new Promise(resolve=>setTimeout(resolve,650));S.busy.fio=false;refreshButtons();if(generation!==S.generation)return 'fio: 场景已切换，旧作业取消。';
+function simulateFioMetrics(c,{testDisk=true,slowdown=false,underLoad=false,ordinal=0}={}){
+  const blockMiB=sizeMiB(c.bs),size=sizeMiB(c.size);
   const random=c.rw.startsWith('rand'),effective=(c.engine==='sync'?1:c.depth)*c.jobs,queueFactor=Math.sqrt(Math.min(effective,32)/16);
   let bw=random?Math.min(450,160*queueFactor*Math.sqrt(blockMiB/(4/1024))):Math.min(520,310+Math.min(effective,32)*12);
   const readRatio=['randrw','rw'].includes(c.rw)?c.mix/100:(c.rw.includes('write')?0:1);
-  bw*=.8+.2*readRatio;if(!testDisk)bw*=.08;if(c.direct===0)bw*=1.15;if(size<512)bw*=c.direct===0?1.3:.95;if(fault('slowdown'))bw*=.23;if(S.stress)bw*=.9;
+  bw*=.8+.2*readRatio;if(!testDisk)bw*=.08;if(c.direct===0)bw*=1.15;if(size<512)bw*=c.direct===0?1.3:.95;if(slowdown)bw*=.23;if(underLoad)bw*=.9;
   // Bounded, reproducible variation, stronger for short runs; no real I/O.
-  const wave=Math.sin((S.project.fio.length+1)*2.4),variation=1+wave*(c.runtime<30?.10:.018);bw*=variation;
+  const wave=Math.sin((ordinal+1)*2.4),variation=1+wave*(c.runtime<30?.10:.018);bw*=variation;
   const elapsed=c.timeBased?c.runtime:Math.min(c.runtime,size*c.jobs/bw);bw=+bw.toFixed(2);
   const iops=Math.max(1,Math.round(bw/blockMiB)),clat=+(effective/iops*1000).toFixed(3),slat=+(.008+c.jobs*.002).toFixed(3),lat=+(slat+clat).toFixed(3),p50=+(clat*.85).toFixed(3),p95=+(clat*1.7).toFixed(3),p99=+(clat*(2.8+(effective>32?.5:0))).toFixed(3);
   const streams=[];if(readRatio>0)streams.push(['READ',readRatio]);if(readRatio<1)streams.push(['WRITE',1-readRatio]);
   const output=`${c.name}: (groupid=0, jobs=${c.jobs}): err=0 [SIMULATED]\n${c.groupReporting||c.jobs===1?streams.map(([label,r])=>`${label}: IOPS=${Math.round(iops*r)}, BW=${(bw*r).toFixed(2)}MiB/s (${(bw*r*elapsed).toFixed(1)}MiB/${elapsed.toFixed(2)}sec)`).join('\n'):Array.from({length:c.jobs},(_,j)=>c.name+'.'+j+': '+streams.map(([label,r])=>`${label}: IOPS=${Math.round(iops*r/c.jobs)}, BW=${(bw*r/c.jobs).toFixed(2)}MiB/s`).join(' ')).join('\n')}\n  slat (msec): avg=${slat}\n  clat (msec): avg=${clat}\n   lat (msec): avg=${lat}\n  clat percentiles (msec):\n   50.00th=[${p50}], 95.00th=[${p95}], 99.00th=[${p99}]\n  effective outstanding I/O≈${effective}, engine=${c.engine}, direct=${c.direct}\n  requested runtime=${c.runtime}s, actual simulated=${elapsed.toFixed(2)}s, time_based=${c.timeBased?1:0}\n  target=${c.target}, bs=${c.bs}, size=${c.size}/job\n[教学模型] 所有数字为模拟数据，不是真实硬盘性能。`;
-  const r={id:Date.now(),at:stamp(),scene:S.scene,version:S.fixed?'1.1':'1.0',config:c,iops,bw,slat,clat,lat,p50,p95,p99,elapsed,output};S.lastFio=r;S.fioRuns.push(r);S.project.fio.push(r);
-  if((S.scene==='fio'&&isBaseline(c)&&c.jobs===1&&c.timeBased)||(S.scene!=='fio'&&testDisk))note('fiotest');practice('fio');persist();renderFioResult();renderFioComparison();return output;
+  return {iops,bw,slat,clat,lat,p50,p95,p99,elapsed,effective,output};
 }
-async function runNetwork(args,fromB=false) {
-  const o=options(args),port=Number(o['-p']||5201);
-  if(!numberIn(port,1,65535)||!Number.isInteger(port))return 'iperf3: -p 必须是1–65535整数。';
-  if(o['-s']){if(fromB){S.peerServer=true;S.peerPort=port;}else{S.localServer=true;S.localPort=port;}refreshNetwork();note('server');return `Server listening on ${port} (模拟服务器${fromB?'B / 192.168.10.20':'A / 192.168.10.10'})\n服务已在模拟后台启动。`;}
-  if(!o['-c'])return '用法: iperf3 -s [-p 5201]；iperf3 -c IP [-p 5201] [-t 10] [-P 4] [-R] [-u -b 800M]。sim b iperf3 ... 在B端运行。';
-  if(S.busy.network)return 'iperf3: 模拟网络作业正在运行。';
-  const ip=String(o['-c']),localIP=fromB?'192.168.10.20':'192.168.10.10',local=ip===localIP,n=networkState();
-  let error=!['192.168.10.10','192.168.10.20'].includes(ip)?'No route to host (未知模拟地址)':!local&&(n.missing||!n.up)?'Network is down':!local&&!n.carrier?'No carrier: 网线/链路异常':!local&&!n.ip?'Cannot assign requested address: A端无有效IPv4':!local&&!n.route?'Destination host unreachable: 错误目的路由':null;
-  if(!error){const targetA=ip==='192.168.10.10';if(!(targetA?S.localServer:S.peerServer)||(targetA?S.localPort:S.peerPort)!==port)error='Connection refused: 目标服务未启动或端口不一致';}
-  const t=Number(o['-t']||10),parallel=Number(o['-P']||1),udp=!!o['-u'],target=netMbps(o['-b']||'800M');
-  if(!numberIn(t,1,3600)||!numberIn(parallel,1,16)||!Number.isInteger(parallel)||((udp||o['-b'])&&(!target||target>100000)))return 'iperf3: 参数无效。检查 -t、-P、-b。';
-  if(error){const r={at:stamp(),error:true,output:'iperf3: '+error,fromB,ip,port,t,parallel,udp,version:S.fixed?'1.1':'1.0',scene:S.scene};S.lastNet=r;S.project.network.push(r);persist();return r.output;}
-  const generation=S.generation;S.busy.network=true;$('net-result').innerHTML='<div class="loading"><i class="spinner"></i>正在生成模拟网络结果…</div>';refreshButtons();
-  await new Promise(resolve=>setTimeout(resolve,650));S.busy.network=false;refreshButtons();if(generation!==S.generation)return 'iperf3: 场景已切换，旧结果取消。';
-  const speed=n.speed,pathCap=local?4200:Math.min(speed,n.limit)*.94,offered=target*parallel;
-  let throughput=udp?Math.min(offered,pathCap):Math.min(local?4400:Math.min(speed,n.limit)*.95,pathCap+(parallel-1)*1.5);
-  const forcedLoss=!local&&S.netFault==='udploss'?.08:0;if(udp)throughput*=1-forcedLoss;
-  if(!udp&&o['-b'])throughput=Math.min(throughput,target*parallel);
-  const retrans=udp?0:(!local&&S.netFault==='retrans'?280:0);if(retrans)throughput*=.62;
-  throughput=+throughput.toFixed(1);const loss=udp?+Math.max(0,(offered-throughput)/offered*100).toFixed(2):0,jitter=udp?(loss>0?1.82:.12):0,total=Math.round(t*offered*1e6/(1460*8)),lost=udp?Math.round(total*loss/100):0,transfer=+(throughput*t/8).toFixed(1);
-  const sender=o['-R']?ip:localIP,receiver=o['-R']?localIP:ip,direction=sender+' → '+receiver;
-  const output=`Connecting to host ${ip}, port ${port}, client=${localIP}\n${o['-R']?'Reverse mode\n':''}[SUM] 0.00-${t.toFixed(2)} sec ${transfer} MBytes ${throughput} Mbits/sec receiver\n${udp?`UDP: Lost/Total=${lost}/${total}, Lost%=${loss}%, Jitter=${jitter} ms`:`TCP: Retr=${retrans}, parallel=${parallel}`}\nDirection: ${direction}\n[模拟] ${local?'回环不代表物理链路性能':`协商 ${speed}Mb/s；路径上限 ${n.limit}Mb/s`}`;
-  const r={id:Date.now(),at:stamp(),scene:S.scene,version:S.fixed?'1.1':'1.0',fromB,ip,port,t,udp,throughput,loss,lost,total,jitter,retrans,transfer,direction,output,local,parallel};S.lastNet=r;S.netRuns.push(r);S.project.network.push(r);if(!local&&(!S.fixed||throughput>=900&&retrans<=10&&loss===0))note('nettest');practice('network');persist();renderNetworkResult();return output;
-}
+async function runFio(args) { return coreFio(args); }
+async function runNetwork(args,fromB=false) { return coreNetwork(args,fromB); }
 let stressTimer;
-function startStress(args) {
-  if(S.stress)return 'stress: 已有模拟压力作业，请先 stop。';
-  const o=options(args),cpu=Number(o['--cpu']||0),vm=Number(o['--vm']||0),io=Number(o['--io']||0),perVm=sizeMiB(o['--vm-bytes']||'512M'),m=String(o['--timeout']||'60s').match(/^(\d+)([sm]?)$/),duration=m?+m[1]*(m[2]==='m'?60:1):0;
-  if(numberIn(cpu,0,32)===null||numberIn(vm,0,8)===null||!Number.isInteger(cpu)||!Number.isInteger(vm)||numberIn(io,0,8)===null||!Number.isInteger(io)||(!cpu&&!vm&&!io)||!perVm||vm*perVm>65536||!numberIn(duration,1,3600))return 'stress: CPU 0–32，vm 0–8，总申请上限64GiB（仅模拟），timeout 1–3600s。';
-  S.resourceMessages=[];S.stress={runId:Date.now(),ownerLessonId:S.academy.activeLesson||null,ownerAttemptId:courseRecord(S.academy.activeLesson)?.attemptId||null,projectId:S.project.id,cpu,vm,io,memMiB:vm*perVm,duration,elapsed:0,command:'stress '+args.join(' '),oom:false,at:stamp(),peakCPU:0,peakMemory:0,peakSwap:0,error:false};
-  if(S.scene==='io')['stop','kernel','current','fiotest','saved'].forEach(key=>S.evidence.delete(key));note('trigger');
-  if(fault('io')||S.stressFault==='io')S.ioError=true;
-  updateResourceState();$('stress-log').textContent='[模拟] dispatching workers: '+cpu+' cpu, '+vm+' vm\n请求总内存 '+(vm*perVm/1024).toFixed(2)+'GiB；用top/free/vmstat及日志监控。';
-  stressTimer=setInterval(()=>advanceTime(10),1000);practice('stress');refresh();
-  return `stress: [simulated] dispatching hogs: ${cpu} cpu, ${vm} vm, ${io} io; memory requested=${vm*perVm}MiB\n作业在模拟后台运行，${duration}s 超时；1秒墙钟≈10秒模拟时间。stop/Ctrl+C停止。${S.ioError?'\nI/O error detected; inspect logs.':''}`;
-}
-function stopStress(reason='manual') {
-  if(!S.stress){if(S.scene==='io'&&S.ioError)note('stop');return 'stress: 无运行中的模拟压力作业。';}
-  clearInterval(stressTimer);const old=S.stress;S.stress=null;note('stop');
-  S.project.stress.push({...old,courseSeq:S.coach.seq+1,ended:stamp(),elapsed:Math.min(old.elapsed,old.duration),reason,scene:S.scene,version:S.fixed?'1.1':'1.0',error:old.error||S.ioError,observed:old.observed||false});persist();updateResourceState();
-  const output=`stress: 模拟${reason==='timeout'?'到时完成':'手动停止'}，elapsed=${Math.min(old.elapsed,old.duration)}s，${old.error||S.ioError?'记录到异常，请查日志':'未记录资源错误'}。原有异常日志保留。`;
-  $('stress-log').textContent+='\n'+output;refreshResources();return output;
-}
+function startStress(args) { return coreStartStress(args); }
+function stopStress(reason='manual') { return coreStopStress(reason); }
 function saveLogs() {
   S.saved=S.captures.map(c=>`[${c.time}] $ ${c.command}\n${c.output}`).join('\n\n');
   if(!S.saved)return 'save-logs: 尚无场景命令输出，请先收集证据。';
@@ -305,13 +288,14 @@ async function dispatch(raw) {
   if(raw.includes('>')) {
     const match=raw.match(/^(.+?)\s*>\s*(\/tmp\/[\w.-]+)$/);
     if(!match)return '模拟器只支持将命令输出保存到虚拟 /tmp/文件名。不会创建真实文件。';
-    const out=await dispatch(match[1]);S.saved+='\n$ '+match[1]+'\n'+out;note('saved');return '已追加到虚拟 '+match[2]+'；本模拟所有保存文件通过 cat /tmp/sit-evidence.log 查看。';
+    const out=await dispatch(match[1]);createVirtualFile(projectEngine().machine,match[2],out.length/1048576,out);S.saved+='\n$ '+match[1]+'\n'+out;note('saved');return 'Output saved to virtual '+match[2];
   }
   if(raw.includes('|')) {
     const m=raw.match(/^(.+?)\s*\|\s*grep\s+(-i\s+)?(.+)$/);
     if(!m)return '模拟器支持简单的 | grep [-i] 关键词，其他管道未实现。';
     const text=await dispatch(m[1]),term=m[3].replace(/^['"]|['"]$/g,'');return text.split('\n').filter(line=>m[2]?line.toLowerCase().includes(term.toLowerCase()):line.includes(term)).join('\n')||'(无匹配行)';
   }
+  const unified=await executeUnifiedCommand(raw);if(unified!==null){S.unifiedOutput=true;return unified;}
   switch(cmd) {
     case 'help':return `SIT LAB V2 · 命令全部模拟，无真实 Linux 内核\n新增：hostnamectl / dmidecode -t system|bios / id / ps aux / date\n存储：fdisk -l / blkid / findmnt / smartctl -a /dev/sdb / iostat -x 1\n网络：ss -tulnp / ip neigh / traceroute / route -n / ethtool -S enp3s0\n服务：systemctl status sit-agent / systemctl list-units\n日志：grep -i error /var/log/messages / tail -n 10 /var/log/messages / less /var/log/messages\n系统: uname -a | cat /etc/os-release | lscpu | nproc | free -h | top | uptime | vmstat 1\n磁盘: lsblk [-f] | df -hT | mount\n网络: ip link | ip -br link | ip -br addr | ip route | ip -s link\n      ethtool enp3s0 | ethtool -i enp3s0 | ping -c 4 192.168.10.20\n驱动: lspci -nnk | lsmod | modinfo simnic | modinfo simhba\n日志: dmesg -T | journalctl -b -k | journalctl -b -1 -k | systemctl --failed\n性能: fio --help | iperf3 --help | stress --help\n辅助: clear | history | stop | save-logs | sim help | reboot（模拟）\n文件: cat /mnt/sit/baseline.txt | cat /mnt/sit/low.fio | cat /tmp/sit-evidence.log\n支持简单 grep 与 > /tmp/文件名；top/vmstat/ping 均为有限快照。`;
     case 'clear':$('terminal-output').replaceChildren();return '';
@@ -352,8 +336,16 @@ async function dispatch(raw) {
       if(!['simnic','simhba'].includes(a[0]))return 'modinfo: 本模拟可查 simnic 或 simhba。';note('driver');
       return `filename: /lib/modules/4.19.90-sit.sim/kernel/drivers/${a[0]}.ko\nversion: ${S.fixed?'1.1':'1.0'}\ndescription: Simulated teaching driver\nlicense: GPL (fictional metadata)\n${a[0]==='simnic'?'firmware: simnic-fw.bin\n':''}vermagic: 4.19.90-sit.sim SMP mod_unload`;
     }
-    case 'dmesg':if(S.scene!=='io'||S.ioError||S.fixed)note('kernel');return logs();
-    case 'journalctl':if(a.includes('-1')){note('previous');return logs(true);}if(S.scene!=='io'||S.ioError||S.fixed)note('current');return logs(false,a.includes('-u'));
+    case 'dmesg':if(S.scene!=='io'||S.ioError||S.fixed)note('kernel');return logs(false,false,true);
+    case 'journalctl': {
+      const kernel=a.includes('-k'),systemFocus=['mount','netpersist','service'].includes(S.scene);
+      if(a.includes('-1')){
+        if(!kernel||S.scene!=='netpersist')note('previous');
+        return logs(true,false,kernel);
+      }
+      if((!kernel||!systemFocus)&&(S.scene!=='io'||S.ioError||S.fixed))note('current');
+      return logs(false,a.includes('-u'),kernel);
+    }
     case 'systemctl':note('service');return systemctlOutput(a);
     case 'fio':if(o['--help'])return 'fio 支持 --numjobs=N、--time_based=0/1、rw=rw；trim仅解释不执行。fio [虚拟作业.fio] 或 --filename=/mnt/sit/test.bin --bs=4k --rw=randread --ioengine=libaio --iodepth=16 --direct=1 --size=1G --runtime=60 --time_based；混合使用 --rwmixread=70。';return runFio(a);
     case 'iperf3':if(o['--help'])return 'iperf3 -s | iperf3 -c 192.168.10.20 [-t 10] [-P 4] [-R] [-u -b 800M]；sim peer start 启动模拟对端。';return runNetwork(a);
@@ -389,11 +381,15 @@ async function dispatch(raw) {
 }
 async function execute(command) {
   const raw=String(command).trim();if(!raw)return '';
+  const practiceRun=currentPractice(),parsed=analyseInput(raw);
+  if(practiceRun)return executePractice(parsed,practiceRun);
   S.history.push(raw);S.historyIndex=S.history.length;appendTerminal('student@sit-server:~$ '+raw,'prompt');
-  const parsed=analyseInput(raw),underLoad=!!S.stress,operationContext={projectId:S.project.id,lessonId:S.academy.activeLesson||null,attemptId:courseRecord(S.academy.activeLesson)?.attemptId||null,loadId:S.stress?.runId||null};let original;
+  S.lastCoreResult=null;S.unifiedOutput=false;
+  const underLoad=!!S.stress,operationContext={...evidenceEnvironment(),projectId:S.project.id,lessonId:S.academy.activeLesson||null,attemptId:courseRecord(S.academy.activeLesson)?.attemptId||null,loadId:S.stress?.runId||null};let original;
   $('terminal-execution-status').textContent='RUNNING';
   try{original=parsed.issues.length?'unsupported simulated syntax':parsed.segments[0]?.opts['--help']?'help':await dispatch(raw);}catch(error){original='simulator: execution error: '+error.message;}
-  const failed=failedSimulation(parsed,original),output=terminalOutput(raw,original,parsed);
+  const typed=S.lastCoreResult?.raw===raw?S.lastCoreResult:null;
+  const failed=Boolean(typed?.failed)||failedSimulation(parsed,original),output=S.unifiedOutput&&!parsed.operators.length?original:terminalOutput(raw,original,parsed);
   if(output)appendTerminal(output);$('terminal-execution-status').textContent=failed?'ERROR':'COMPLETED';
   if(raw!=='clear')record(raw,output,!failed&&!parsed.segments[0]?.opts['--help']);
   practice('terminal');afterCommand(raw,output,parsed,failed,underLoad,operationContext);refresh();return output;
@@ -416,8 +412,8 @@ function setFioForm(low=false) {
 }
 function metric(label,value,unit='',error=false) {return `<div class="metric${error?' error':''}"><small>${label}</small><b>${esc(value)}<span>${unit}</span></b></div>`;}
 function renderFioResult() {
-  const r=S.lastFio;if(!r||r.error)return;const c=r.config;
-  $('fio-result').innerHTML=`<div class="panel-title"><h2>磁盘测试结果</h2><span class="tag">SIMULATED / err=0</span></div><div class="result-metrics">${metric('IOPS · 总操作率',r.iops.toLocaleString(),'次/秒')}${metric('BW · 总吞吐',r.bw,'MiB/s')}${metric('slat / clat / lat',r.slat+' / '+r.clat+' / '+r.lat,'ms')}${metric('P50 / P95 / P99',r.p50+' / '+r.p95+' / '+r.p99,'ms')}</div><p class="result-notes">${c.engine==='sync'?'sync 每作业有效深度为1；':'libaio模拟异步请求；'}总在途约 ${(c.engine==='sync'?1:c.depth)*c.jobs}。${c.direct===0?'缓存会改变测量条件，勿与direct=1直接比较。':''}${c.target.startsWith('/root')?'目标是系统盘。':'目标是独立测试盘。'}${c.timeBased?'持续模拟指定时长。':'仅跑一轮size数据集，可能在runtime前完成。'}<br>IOPS≈BW/块大小；并发达到设备瓶颈后，吞吐收益递减，排队延迟可能继续增长。slat为提交开销，clat为提交到完成，lat为两者之和；百分位基于clat。</p><pre class="light-log">${esc(r.output)}</pre><button data-add-compare="${r.id}">加入两组结果对比</button>`;
+  const r=S.lastFio;if(!r)return;if(r.error){$('fio-result').innerHTML='<pre class="light-log">'+esc(r.output)+'</pre>';return;}const c=r.config;
+  $('fio-result').innerHTML=`<div class="panel-title"><h2>磁盘测试结果</h2><span class="tag">SIMULATED / err=0</span></div><div class="result-metrics">${metric('IOPS · 总操作率',r.iops.toLocaleString(),'次/秒')}${metric('BW · 总吞吐',r.bw,'MiB/s')}${metric('slat / clat / lat',r.slat+' / '+r.clat+' / '+r.lat,'ms')}${metric('P50 / P95 / P99',r.p50+' / '+r.p95+' / '+r.p99,'ms')}</div><p class="result-notes">${c.engine==='sync'?'sync 每作业有效深度为1；':c.engine+'模拟异步请求；'}总在途约 ${(c.engine==='sync'?1:c.depth)*c.jobs}。${c.direct===0?'缓存会改变测量条件，勿与direct=1直接比较。':''}${c.target.startsWith('/root')?'目标是系统盘。':'目标是独立测试盘。'}${c.timeBased?'持续模拟指定时长。':'仅跑一轮size数据集，可能在runtime前完成。'}<br>IOPS≈BW/块大小；并发达到设备瓶颈后，吞吐收益递减，排队延迟可能继续增长。slat为提交开销，clat为提交到完成，lat为两者之和；百分位基于clat。</p><pre class="light-log">${esc(r.output)}</pre><button data-add-compare="${r.id}">加入两组结果对比</button>`;
 }
 function renderNetworkResult() {
   const r=S.lastNet;if(!r)return;if(r.error){$('net-result').innerHTML='<pre class="light-log">'+esc(r.output)+'</pre>';return;}
@@ -435,17 +431,23 @@ function refreshNetwork() {
   const n=networkState();$('link-speed').textContent=n.missing?'接口未创建':!n.carrier?'无载波':n.speed+' Mbps';
   $('server-state').textContent='A .10: '+(S.localServer?'监听 '+S.localPort:'未启动')+' ｜ B .20: '+(S.peerServer?'监听 '+S.peerPort:'未启动');
   $('local-server').textContent=S.localServer?'A端已启动:'+S.localPort:'启动A端 iperf3 -s';$('peer-toggle').textContent=S.peerServer?'停止B端服务':'启动B端服务';
-  $('endpoint-a').innerHTML=`<b>服务器 A · 本机</b><br>IP：${n.ip||'无IPv4'} / enp3s0<br>网卡：${n.missing?'未创建':n.up?'UP':'DOWN'} · ${n.carrier?n.speed+'Mb/s Full':'无载波'}<br>驱动：${n.missing?'未成功绑定':'simnic '+(S.fixed?'1.1':'1.0')}<br>服务端：${S.localServer?'监听 '+S.localPort:'未启动'}`;
+  $('endpoint-a').innerHTML=`<b>服务器 A · 本机</b><br>IP：${n.ip||'无IPv4'} / enp3s0<br>网卡：${n.missing?'未创建':n.up?'UP':'DOWN'} · ${n.carrier?n.speed+'Mb/s Full':'无载波'}<br>驱动：${n.missing?'未成功绑定':'simnic 1.0'}<br>服务端：${S.localServer?'监听 '+S.localPort:'未启动'}`;
   $('endpoint-b').innerHTML=`<b>服务器 B · 模拟对端</b><br>IP：192.168.10.20 / enp4s0<br>网卡：UP · 1000Mb/s Full<br>驱动：simnic 1.0<br>服务端：${S.peerServer?'监听 '+S.peerPort:'未启动'}<br>客户端：${S.busy.network?'测试中':S.lastNet?.error?'上次连接失败':S.lastNet?.fromB?'最近测试已完成':'待执行'}`;
 }
 function refresh() {
+  renderKernelWorkbench();
+  if(['home','lesson','cases'].includes(S.page))return;
+  syncProjectMachine();
   $('page-status').textContent=S.scene?'● '+(S.fixed?'修复版 1.1 · ':'故障注入 · ')+scenarios[S.scene].title:'● 教学服务器在线';
-  $('overview-stats').innerHTML=[['CPU / PROCESSOR','8','核 / 16线程','SimServer 3200 · x86_64'],['MEMORY','16','GiB','可用 '+(16-S.memory).toFixed(1)+' GiB / 模拟'],['STORAGE','240','GiB','独立测试盘 · /mnt/sit'],['NETWORK',networkState().missing?'N/A':linkSpeed(),'Mbps',networkState().missing?'enp3s0 未创建':!networkState().up?'enp3s0 DOWN':!networkState().carrier?'无载波':'enp3s0 · '+linkSpeed()+'Mb/s']].map(([a,b,c,d])=>`<div class="stat"><small>${a}</small><b>${b}<em>${c}</em></b><p>${d}</p></div>`).join('');
+  if(S.page==='overview')$('overview-stats').innerHTML=[['CPU / PROCESSOR','8','核 / 16线程','SimServer 3200 · x86_64'],['MEMORY','16','GiB','可用 '+(16-S.memory).toFixed(1)+' GiB / 模拟'],['STORAGE','240','GiB','独立测试盘 · /mnt/sit'],['NETWORK',networkState().missing?'N/A':linkSpeed(),'Mbps',networkState().missing?'enp3s0 未创建':!networkState().up?'enp3s0 DOWN':!networkState().carrier?'无载波':'enp3s0 · '+linkSpeed()+'Mb/s']].map(([a,b,c,d])=>`<div class="stat"><small>${a}</small><b>${b}<em>${c}</em></b><p>${d}</p></div>`).join('');
   $('learning-progress').textContent=`已体验 ${['fio','network','stress'].filter(k=>S.practiced.includes(k)).length}/3 个专项实验 · 已完成 ${S.completed.length}/${Object.keys(scenarios).length} 个故障 · 已练习 ${Object.keys(S.answers).filter(k=>!k.includes(':')).length}/${questions.length} 道面试题`;
-  renderProject();renderLiveHardware();
-  $('hardware-info').innerHTML='<table><thead><tr><th>项目</th><th>配置 / 教学数据</th></tr></thead><tbody>'+liveEnvironment().map(([a,b])=>`<tr><td>${a}</td><td>${b}</td></tr>`).join('')+'</tbody></table>';
+  if(['overview','project'].includes(S.page))renderProject();
+  if(S.page==='overview')renderLiveHardware();
+  if(S.page==='hardware')$('hardware-info').innerHTML='<table><thead><tr><th>项目</th><th>配置 / 教学数据</th></tr></thead><tbody>'+liveEnvironment().map(([a,b])=>`<tr><td>${a}</td><td>${b}</td></tr>`).join('')+'</tbody></table>';
   $('terminal-scenario').innerHTML=S.scene?`当前：${esc(scenarios[S.scene].title)}${S.fixed?' · 修复版 1.1':' · 故障版 1.0'}。${S.evidence.size} 项证据已收集。<button data-go="faults">返回排查工作台 →</button> <button data-action="save">保存证据</button>`:'建议先运行 uname -a、lscpu、lsblk -f、ip -br link。输入 help 查看所有命令；在故障排查中选择场景后，这里会显示相应异常。';
-  refreshNetwork();refreshResources();renderScenarios();renderBugs();renderWorkMode();renderSessionBar();renderAssessmentPage();
+  if(S.page==='network')refreshNetwork();if(S.page==='stress')refreshResources();
+  if(S.page==='faults')renderScenarios();if(S.page==='bugs')renderBugs();if(S.page==='assessment')renderAssessmentPage();
+  renderWorkMode();renderSessionBar();
   if(assessmentActive()){$('page-status').textContent='● 独立考核 · 无解析模式';$('terminal-scenario').textContent=S.coach.exam.injected?scenarios[S.coach.exam.caseId].desc:'按任务书自行巡检和执行测试。';}
   else if(S.coach.mode==='free'&&!S.scene)$('terminal-scenario').textContent='自由实操：自行决定检查目标和下一步，解析在执行之后生成。';
 }
@@ -474,7 +476,7 @@ function submitDiagnosis() {
   const missing=c.steps.filter(([key])=>!S.evidence.has(key));
   if(missing.length)S.diagnosisMessage=S.freeMode?'证据仍不足，请继续从不同层次验证推断。':'仍缺证据：'+missing.map(([,label])=>label).join('、');
   else if(S.freeMode?!freeDiagnosisMatches(S.scene,analysis):Number($('diagnosis').value)!==c.answer)S.diagnosisMessage='判断与证据还未形成一致结论，请对照实际输出重新分析。';
-  else {S.diagnosisMessage='排查已完成。原因、建议和原始证据已记录到项目；下一步提交Bug并在修复版验证。';S.explanation=!S.freeMode;if(!S.completed.includes(S.scene))S.completed.push(S.scene);S.project.cases.push({id:S.scene,title:c.title,at:stamp(),analysis,advice,free:S.freeMode,assisted:S.hints>0||S.explanation,commands:S.captures.map(c=>c.command)});persist();}
+  else {S.diagnosisMessage='排查已完成。原因、建议和原始证据已记录到项目；下一步提交Bug并在修复版验证。';S.explanation=!S.freeMode;if(!S.completed.includes(S.scene))S.completed.push(S.scene);S.project.cases.push({...evidenceEnvironment(),id:S.scene,title:c.title,at:stamp(),analysis,advice,free:S.freeMode,assisted:S.hints>0||S.explanation,commands:S.captures.map(c=>c.command)});persist();}
   renderScenarios();renderProject();
 }
 function prepareBug() {
@@ -494,14 +496,15 @@ function applyFix(id) {
   captureAssessmentBeforeFix();archiveCurrentScenario('应用修复版');
   const b=S.bugs.find(b=>b.id===id);if(!b?.scene)return;
   stopStress();S.generation++;S.scene=b.scene;S.fixed=true;S.ioError=false;S.evidence=new Set();S.captures=[];S.saved='';S.regression=id;S.localServer=false;S.peerServer=false;resetFaultState();S.lastFio=null;S.lastNet=null;
-  b.status='待回归';b.version='1.1';clearLabResults();setFioForm(false);persist();showPage('faults');toast('已切换到模拟修复版本，证据清单已清空。请重新执行回归。');
+  b.status='待回归';b.version='1.1';S.regressionEnvironment=environmentKey(projectEngine().machine);clearLabResults();setFioForm(false);persist();showPage('faults');toast('已切换到模拟修复版本，证据清单已清空。请重新执行回归。');
 }
 function regressionVerdict(id,pass) {
   const b=S.bugs.find(b=>b.id===id);if(!b||S.regression!==id||!S.fixed||b.scene!==S.scene)return;
+  if(S.regressionEnvironment!==environmentKey(projectEngine().machine)){S.evidence.clear();S.captures=[];S.regressionEnvironment=environmentKey(projectEngine().machine);toast('模拟环境已变化，请在当前环境重新收集回归证据。');return;}
   const missing=scenarios[b.scene].regression.filter(([key])=>!S.evidence.has(key));
   if(pass&&missing.length){toast(assessmentActive()?'回归证据不足，暂不能关闭。':'尚不能关闭：还需 '+missing.map(([,label])=>label).join('、'));return;}
   const evidence=S.captures.map(c=>'$ '+c.command+'\n'+c.output).join('\n\n');
-  b.regressions=b.regressions||[];b.regressions.push({time:new Date().toLocaleString('zh-CN'),version:'1.1',verdict:pass?'已解决':'未解决（学习者判断）',evidence});
+  b.regressions=b.regressions||[];b.regressions.push({...evidenceEnvironment(),time:new Date().toLocaleString('zh-CN'),version:'1.1',verdict:pass?'已解决':'未解决（学习者判断）',evidence});
   b.status=pass?'已关闭':'重新打开';S.regression=null;persist();refresh();toast(pass?'已记录回归证据并关闭模拟 Bug。':'已记录未解决结论，Bug 重新打开。');
 }
 function renderQuestion() {
@@ -523,6 +526,7 @@ function renderReference() { renderKnowledge(); }
 // Events are delegated so regenerated scenario/bug cards stay interactive.
 document.addEventListener('click',event=>{
   const b=event.target.closest('button');if(!b||b.disabled)return;
+  if(handleExperienceClick(b))return;
   if(handleAcademyClick(b))return;
   if(handleCoachClick(b))return;
   if(handleV2Click(b))return;
@@ -543,11 +547,14 @@ document.addEventListener('click',event=>{
 });
 $('terminal-form').addEventListener('submit',event=>{event.preventDefault();const cmd=$('command').value;$('command').value='';execute(cmd);});
 $('command').addEventListener('keydown',event=>{
+  const run=currentPractice();
   if(event.key==='ArrowUp'||event.key==='ArrowDown'){
-    event.preventDefault();S.historyIndex=Math.max(0,Math.min(S.history.length,S.historyIndex+(event.key==='ArrowUp'?-1:1)));$('command').value=S.history[S.historyIndex]||'';
+    event.preventDefault();const direction=event.key==='ArrowUp'?-1:1;
+    if(run){run.cursor=Math.max(0,Math.min(run.events.length,run.cursor+direction));$('command').value=run.events[run.cursor]?.raw||'';return;}
+    S.historyIndex=Math.max(0,Math.min(S.history.length,S.historyIndex+direction));$('command').value=S.history[S.historyIndex]||'';
   }
   if(event.ctrlKey&&event.key.toLowerCase()==='l'){event.preventDefault();$('terminal-output').replaceChildren();}
-  if(event.ctrlKey&&event.key.toLowerCase()==='c'){event.preventDefault();appendTerminal('^C\n'+terminalOutput('stop',stopStress(),analyseInput('stop')));refresh();}
+  if(event.ctrlKey&&event.key.toLowerCase()==='c'){event.preventDefault();if(run){$('command').value='';if(run.machine.load)execute('stop');return;}appendTerminal('^C\n'+terminalOutput('stop',stopStress(),analyseInput('stop')));refresh();}
 });
 $('clear-terminal').addEventListener('click',()=>$('terminal-output').replaceChildren());
 ['fio-form','network-form','stress-form'].forEach(id=>{
@@ -567,7 +574,7 @@ $('stop-stress').addEventListener('click',()=>execute('stop'));
 $('bug-form').addEventListener('submit',event=>{
   event.preventDefault();const form=$('bug-form'),data=Object.fromEntries(new FormData(form));
   if(Object.values(data).some(v=>!String(v).trim())){toast('请填写所有缺陷字段，避免提交空白内容。');return;}
-  const bug={...data,projectId:S.project.id,id:'SIT-'+Date.now().toString(36).toUpperCase(),scene:$('bug-scene').value,status:'待修复',created:new Date().toLocaleString('zh-CN'),regressions:[]};
+  const bug={...data,simulationEnvironment:machineEnvironment(projectEngine().machine),environmentKey:environmentKey(projectEngine().machine),projectId:S.project.id,id:'SIT-'+Date.now().toString(36).toUpperCase(),scene:$('bug-scene').value,status:'待修复',created:new Date().toLocaleString('zh-CN'),regressions:[]};
   S.bugs.push(bug);persist();form.reset();$('bug-scene').value=S.scene||'';renderBugs();toast('模拟 Bug 已提交，现可加载修复版本进行回归。');
 });
 $('import-evidence').addEventListener('click',()=>{if(!S.saved){toast('请先在场景或终端使用 save-logs 保存证据。');return;}$('bug-form').elements.logs.value=S.saved;toast('已导入已保存的原始命令输出。');});
@@ -581,4 +588,4 @@ $('reference-search').addEventListener('input',renderReference);
 window.addEventListener('hashchange',()=>showPage(location.hash.slice(1),false));
 // Primary navigation is rendered from the five workflow groups by showPage().
 appendTerminal('Kylin Linux Advanced Server V10 / SIT-SERVER-01', 'intro');
-initV2();initCoach();initAcademy();updateCommands();renderQuestion();renderReference();showPage(location.hash.slice(1)||'academy',false);
+initKernelWorkbench();initV2();restoreSession(stored.session);initCoach();initAcademy();initExperience();updateCommands();renderQuestion();renderReference();showPage(location.hash.slice(1)||(assessmentActive()?'assessment':'home'),false);

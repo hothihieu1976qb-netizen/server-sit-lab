@@ -1,25 +1,23 @@
 'use strict';
 // Additional project, learning and shared-state helpers; no runtime dependencies.
 function stamp(){return new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});}
-function networkState(){
-  const missing=fault('nic')||fault('driver'),up=S.netFault!=='down',carrier=!missing&&S.netFault!=='cable';
-  return {missing,up,carrier,ip:fault('noip')||fault('netpersist')||S.netFault==='ip'?null:'192.168.10.10',route:S.netFault!=='route',speed:fault('link')||S.netFault==='speed'?100:1000,limit:S.netFault==='switch'?100:1000};
-}
-function storageState(){return {present:!fault('bootdriver'),mounted:!fault('bootdriver')&&!fault('mount'),full:fault('full')};}
+function networkState(){const m=projectEngine().machine;return {...labNetworkState(m),limit:m.pathLimit||1000};}
+function storageState(){const m=projectEngine().machine;return {present:labDiskVisible(m),mounted:m.mounted,full:labDiskUsage(m)>=LAB_DISK_MIB};}
 function liveEnvironment(){
-  const n=networkState(),d=storageState();return environment.map(([name,value])=>{
+  const m=projectEngine().machine,n=networkState(),d=storageState();return environment.map(([name,value])=>{
+    if(name==='内核 / 架构')value=kernelRelease(m)+' / x86_64';
     if(name==='网卡')value=`SimNIC G1 · ${n.missing?'接口未创建':`enp3s0 ${n.up?'UP':'DOWN'} / ${n.carrier?n.speed+'Mb/s Full':'无载波'}`}`;
     if(name==='IP / 网关')value=`${n.ip?n.ip+'/24':'无IPv4地址'} · ${n.route?'网关192.168.10.1':'异常主机路由经192.168.10.254'}`;
     if(name==='独立测试盘')value=`SimSSD240 · 240GiB · ${!d.present?'当前未识别':d.mounted?'sdb1 ext4 /mnt/sit':'sdb1 ext4 未挂载'}${d.full?' · 空间已满':''}`;
-    if(name==='网卡驱动 / 固件')value=`simnic ${S.fixed?'1.1':'1.0'} / ${fault('driver')?'模块未加载':fault('nic')?'固件加载失败、未绑定':'已加载并绑定，simnic-fw-1.0'}`;
-    if(name==='存储驱动')value=fault('bootdriver')?'simhba加载失败；HBA未绑定':`simhba ${S.fixed?'1.1':'1.0'} · SimStorage HBA`;
+    if(name==='网卡驱动 / 固件')value=`simnic 1.0 / ${!m.nicLoaded?'模块未加载':!m.nicBound?'未绑定，检查probe日志':'已加载并绑定，simnic-fw-1.0'}`;
+    if(name==='存储驱动')value=!m.hbaBound?'simhba未绑定；检查模块和日志':`simhba 1.0 · SimStorage HBA`;
     return [name,value];
   });
 }
 function renderLiveHardware(){
   const n=networkState(),d=storageState();
   const stats=$('overview-stats').querySelectorAll('.stat p');if(stats.length){stats[1].textContent='可用 '+(16-S.memory).toFixed(1)+'GiB / 模拟';stats[2].textContent=!d.present?'当前未识别 · 名义240GiB':!d.mounted?'sdb1 当前未挂载':d.full?'/mnt/sit · 空间已满':'独立测试盘 · /mnt/sit';}
-  $('live-hardware-summary').innerHTML=`<span>系统 <b>麒麟V10 / 4.19.90-sit.sim</b></span><span>CPU <b>${S.cpu.toFixed(1)}%</b></span><span>内存 <b>${S.memory.toFixed(1)}/16GiB</b></span><span>测试盘 <b>${!d.present?'未识别':!d.mounted?'未挂载':d.full?'空间满':'已挂载'}</b></span><span>网络 <b>${n.missing?'接口缺失':!n.up?'DOWN':!n.carrier?'无载波':n.ip?n.speed+'Mb/s':'无IP'}</b></span>`;
+  $('live-hardware-summary').innerHTML=`<span>系统 <b>麒麟V10 / ${kernelRelease(projectEngine().machine)}</b></span><span>CPU <b>${S.cpu.toFixed(1)}%</b></span><span>内存 <b>${S.memory.toFixed(1)}/16GiB</b></span><span>测试盘 <b>${!d.present?'未识别':!d.mounted?'未挂载':d.full?'空间满':'已挂载'}</b></span><span>网络 <b>${n.missing?'接口缺失':!n.up?'DOWN':!n.carrier?'无载波':n.ip?n.speed+'Mb/s':'无IP'}</b></span>`;
 }
 function dfOutput(showType=true){const d=storageState(),output='Filesystem Type Size Used Avail Use% Mounted on\n/dev/sda2 ext4 119G 18G 101G 16% /\n/dev/sda1 ext4 1G 180M 844M 18% /boot'+(d.mounted?`\n/dev/sdb1 ext4 240G ${d.full?'240G 0G 100%':'12G 228G 5%'} /mnt/sit`:'');return showType?output:output.replace(' Type','').replace(/ ext4/g,'');}
 function mountOutput(tree=false){
@@ -27,11 +25,11 @@ function mountOutput(tree=false){
   return '/dev/sda2 on / type ext4 (rw,relatime)\n/dev/sda1 on /boot type ext4 (rw,relatime)'+(d.mounted?'\n/dev/sdb1 on /mnt/sit type ext4 (rw,relatime)':'');
 }
 function pciOutput(){const n=networkState();return `03:00.0 Ethernet controller [0200]: SimNIC G1 [1abc:1001]\n Kernel driver in use: ${n.missing?'(none)':'simnic'}\n Kernel modules: simnic\n04:00.0 SAS controller [0107]: SimStorage HBA [1abc:2001]\n Kernel driver in use: ${fault('bootdriver')?'(none)':'simhba'}\n Kernel modules: simhba\n00:17.0 SATA controller: SimBoot AHCI [1abc:2000]\n Kernel driver in use: simahci [虚构教学信息]`;}
-function ethtoolOutput(args){
-  const dev=args.find(a=>!a.startsWith('-')),n=networkState();if(!dev)return '用法 ethtool [-i|-S] enp3s0';if(dev!=='enp3s0'||n.missing)return 'Cannot get device settings: No such device [模拟]';
-  if(args.includes('-i')){note('driver');return `driver: simnic\nversion: ${S.fixed?'1.1':'1.0'}\nfirmware-version: simnic-fw-1.0\nbus-info: 0000:03:00.0`;}
-  if(args.includes('-S'))return `NIC statistics:\n rx_packets: 72500\n rx_crc_errors: ${S.netFault==='cable'?128:0}\n rx_dropped: ${S.netFault==='udploss'?320:0}\n tx_timeout: ${S.netFault==='retrans'?48:0}`;
-  note('ethtool');return `Settings for enp3s0:\n Supported link modes: 10baseT/Full 100baseT/Full 1000baseT/Full\n Advertised link modes: 10baseT/Full 100baseT/Full 1000baseT/Full\n Speed: ${n.carrier?n.speed+'Mb/s':'Unknown!'}\n Duplex: ${n.carrier?'Full':'Unknown!'}\n Auto-negotiation: on\n Link detected: ${n.carrier?'yes':'no'}\n[模拟] Speed是协商速率，Full是全双工，yes代表有载波；还要用ip link检查管理状态。`;
+function ethtoolOutput(args,n=networkState(),collect=true){
+  const dev=args.find(a=>!a.startsWith('-')),netFault=n.networkFault??S.netFault;if(!dev)return '用法 ethtool [-i|-S] enp3s0';if(dev!=='enp3s0'||n.missing)return 'Cannot get device settings: No such device [模拟]';
+  if(args.includes('-i')){if(collect)note('driver');return `driver: simnic\nversion: ${(n.fixed??S.fixed)?'1.1':'1.0'}\nfirmware-version: simnic-fw-1.0\nbus-info: 0000:03:00.0`;}
+  if(args.includes('-S'))return `NIC statistics:\n rx_packets: 72500\n rx_crc_errors: ${netFault==='cable'?128:0}\n rx_dropped: ${netFault==='udploss'?320:0}\n tx_timeout: ${netFault==='retrans'?48:0}`;
+  if(collect)note('ethtool');return `Settings for enp3s0:\n Supported link modes: 10baseT/Full 100baseT/Full 1000baseT/Full\n Advertised link modes: 10baseT/Full 100baseT/Full 1000baseT/Full\n Speed: ${n.carrier?n.speed+'Mb/s':'Unknown!'}\n Duplex: ${n.carrier?'Full':'Unknown!'}\n Auto-negotiation: on\n Link detected: ${n.carrier?'yes':'no'}`;
 }
 function pingOutput(args){
   const target=args.find((v,i)=>!v.startsWith('-')&&!(i>0&&['-c','-i','-W'].includes(args[i-1]))),n=networkState();if(!target)return '用法 ping -c 4 192.168.10.20';
@@ -67,29 +65,8 @@ function vmstatOutput(){
   const wa=S.ioError?9:0,used=Math.min(S.cpu,100-wa),swap=S.swap>0?128:0;
   return `procs --------memory-------- --swap-- ---io--- -----cpu-----\n r b swpd free buff cache si so bi bo us sy id wa\n ${fault('cpu')?16:S.stress?Math.min(16,S.stress.cpu):1} ${S.ioError?1:0} ${Math.round(S.swap*1048576)} ${Math.round(Math.max(0,14.5-S.memory)*1048576)} 65536 524288 ${swap} ${swap} ${S.ioError?128:0} ${S.ioError?64:(S.stress?.io||0)*16} ${Math.round(used-2)} 2 ${Math.round(100-used-wa)} ${wa}\n[模拟快照] si/so单位KiB/s；本模型仅在内存压力活跃时显示换页。`;
 }
-function updateResourceState(){
-  S.cpu=fault('cpu')?96:3;let base=fault('leak')?Math.min(15.8,3.1+S.simTime/30*.8):2.1;S.memory=base;S.swap=0;
-  if(!S.stress)return;
-  const t=S.stress;S.cpu=Math.min(99,S.cpu+t.cpu/16*96);let request=t.memMiB/1024;
-  if(S.stressFault==='cpu')S.cpu=99;
-  if(S.stressFault==='lowmem')request=Math.max(request,14.8);
-  if(S.stressFault==='oom')request=Math.max(request,20);
-  if(t.oom)request=0;
-  S.cpu=Math.min(99,S.cpu+(t.io||0)*2);
-  const total=base+request;S.memory=Math.min(15.7,total);S.swap=Math.min(2,Math.max(0,total-15.5));
-  const add=message=>{if(!S.resourceMessages.includes(message))S.resourceMessages.push(message);};
-  if(S.cpu>=95)add('[模拟监控] CPU持续高使用率，检查运行队列与业务响应。');
-  if(total>15)add('[模拟监控] MemAvailable不足，swap使用增加；检查资源配额。');
-  if((total>18||S.stressFault==='oom')&&t.elapsed>=10&&!t.oom){t.oom=true;t.error=true;add('Out of memory: Killed process 843 (stress-vm), simulated OOM killer');S.memory=base;S.swap=0;}
-  if(S.swap>0||S.stressFault==='slow')add('[模拟监控] 系统响应变慢：检查换页、CPU队列与I/O等待。');
-  if(S.ioError)t.error=true;
-  t.peakCPU=Math.max(t.peakCPU,S.cpu);t.peakMemory=Math.max(t.peakMemory,S.memory);t.peakSwap=Math.max(t.peakSwap,S.swap);
-}
-function advanceTime(seconds){
-  S.simTime+=seconds;if(S.stress)S.stress.elapsed+=seconds;updateResourceState();
-  if(S.stress&&S.stress.elapsed>=S.stress.duration)stopStress('timeout');
-  refreshResources();renderLiveHardware();renderProject();
-}
+function updateResourceState(){syncProjectMachine();}
+function advanceTime(seconds){coreAdvanceTime(seconds);}
 function resetFaultState(){
   S.netFault='none';S.stressFault='normal';S.resourceMessages=[];S.simTime=0;S.memorySample=null;S.swap=0;$('net-fault').value='none';$('stress-fault').value='normal';updateResourceState();
 }
@@ -104,51 +81,60 @@ function trackProjectCommand(command,output){
   if(/^uname\b/.test(raw))key='kernelVersion';else if(raw==='cat /etc/os-release')key='os';else if(/^lscpu/.test(raw))key='cpu';
   else if(/^free\b/.test(raw)){key='memory';if(S.memorySample!==null&&S.simTime>S.memorySample)note('trend');S.memorySample=S.simTime;}
   else if(/^lsblk/.test(raw)){key=raw.includes('-f')?'blockfs':'block';ok=d.present&&(key!=='blockfs'||d.mounted);}
-  else if(/^lspci/.test(raw)){key='pci';ok=!n.missing&&!fault('bootdriver');}
+  else if(/^lspci/.test(raw)){key='pci';ok=!n.missing&&d.present;}
   else if(/^ip .*\blink\b/.test(raw)){key='link';ok=!n.missing&&n.up&&n.carrier;}
   else if(/^ip .*\baddr\b/.test(raw)){key='address';ok=!n.missing&&!!n.ip;}
-  else if(/^dmesg/.test(raw)||/^journalctl/.test(raw)&&!raw.includes('-1')&&!raw.includes('-u')){key=raw.startsWith('dmesg')?'kernelLog':'journal';ok=!S.ioError&&!n.missing&&!fault('bootdriver')&&!fault('mount')&&!fault('full')&&!S.resourceMessages.some(x=>x.includes('Out of memory'));}
+  else if(/^dmesg/.test(raw)||/^journalctl/.test(raw)&&!raw.includes('-1')&&!raw.includes('-u')){key=raw.startsWith('dmesg')?'kernelLog':'journal';ok=!/I\/O error|Out of memory|probe failed|invalid module|not found|ENOSPC/i.test(output);}
   else if(/^dmidecode/.test(raw))key=raw.includes('bios')?'bios':'model';
-  if(key)S.project.observations[key]={command,output,ok,at:stamp(),context:S.scene?(S.fixed?'修复版:':'故障版:')+scenarios[S.scene].title:'正常环境'};
+  if(key)S.project.observations[key]={...evidenceEnvironment(),command,output,ok,at:stamp(),context:S.scene?(S.fixed?'修复版:':'故障版:')+scenarios[S.scene].title:'正常环境'};
   if(S.stress&&/^(top|free|vmstat|dmesg|journalctl)\b/.test(raw))S.stress.observed=true;
   persist();
 }
 function projectBugs(){return S.bugs.filter(b=>b.projectId===S.project.id);}
+function latestDiskMode(mode){
+  return S.project.fio.filter(currentEvidence).filter(r=>r.config.target.startsWith('/mnt/sit/')&&(mode==='mixed'?['rw','randrw'].includes(r.config.rw):r.config.rw===mode)).at(-1);
+}
+function latestDiskBaseline(){
+  return S.project.fio.filter(currentEvidence).filter(r=>isBaseline(r.config)&&r.config.jobs===1&&r.config.timeBased).at(-1);
+}
+function baselinePass(result){
+  return !result.error&&result.iops>=38000&&result.iops<=45000;
+}
 function projectStages(){
-  const p=S.project,checks=list=>list.every(([key])=>p.observations[key]?.ok),observed=list=>list.some(([key])=>p.observations[key]);
+  const p=currentProjectData(),checks=list=>list.every(([key])=>p.observations[key]?.ok),observed=list=>list.some(([key])=>p.observations[key]);
   const checklistState=list=>checks(list)?'已完成':list.some(([key])=>p.observations[key]&&!p.observations[key].ok)?'发现异常':observed(list)?'进行中':'未执行';
-  const diskModes=['read','write','randread','randwrite','mixed'].every(mode=>p.fio.some(r=>!r.error&&r.config.target.startsWith('/mnt/sit/')&&(mode==='mixed'?['rw','randrw'].includes(r.config.rw):r.config.rw===mode)));
-  const baseline=p.fio.some(r=>!r.error&&isBaseline(r.config)&&r.config.jobs===1&&r.config.timeBased&&r.iops>=38000&&r.iops<=45000);
+  const diskModes=['read','write','randread','randwrite','mixed'].map(latestDiskMode);
+  const baseline=latestDiskBaseline();
   const f=p.fio.at(-1),net=p.network.filter(r=>!r.local).at(-1),tcp=p.network.filter(r=>!r.local&&!r.udp).at(-1),udp=p.network.filter(r=>!r.local&&r.udp).at(-1),stress=p.stress.at(-1),bugs=projectBugs();
   return [
     ['测试环境确认',checklistState(ENV_CHECKS),'project'],['安装后基础检查',checklistState(BASIC_CHECKS),'terminal'],
-    ['磁盘功能与性能',!f?'未执行':f.error?'发现异常':diskModes&&baseline?'已完成':'已执行/待基线验证','fio'],
+    ['磁盘功能与性能',!f?'未执行':diskModes.some(r=>r?.error)||baseline&&!baselinePass(baseline)?'发现异常':diskModes.every(Boolean)&&baseline?'已完成':'已执行/待基线验证','fio'],
     ['网络功能与性能',!net?'未执行':net.error||tcp&&(tcp.error||tcp.throughput<900||tcp.retrans>10)||udp&&(udp.error||udp.loss>0)?'发现异常':tcp&&udp?'已完成':'已执行/待TCP与UDP补全','network'],
     ['压力与稳定性',S.stress?'进行中':!stress?'未执行':stress.error?'发现异常':!stress.observed||stress.elapsed<stress.duration?'已执行/需监控并跑满时长':'已完成','stress'],
     ['故障定位',p.cases.length?'已完成':'未执行','faults'],
-    ['Bug提交和回归',!bugs.length?'未执行':bugs.every(b=>b.status==='已关闭'&&b.regressions?.some(r=>r.verdict==='已解决'))?'已完成':'进行中/有未关闭缺陷','bugs'],
+    ['Bug提交和回归',!bugs.length?'未执行':bugs.every(b=>b.status==='已关闭'&&b.regressions?.some(r=>r.verdict==='已解决'&&currentEvidence(r)))?'已完成':'进行中/有未关闭缺陷','bugs'],
     ['测试报告',p.reportAt?'已生成':'未生成','project']
   ];
 }
 function renderProject(){
   if(assessmentActive()){$('project-board').innerHTML='<div class="panel"><h2>当前工程用于独立考核</h2><p class="muted">任务、输出理解和交卷统一在独立考核入口。生成的报告按本轮实际记录保存。</p><div class="inline-actions"><button data-go="assessment">返回考核任务书</button><button data-action="generate-report">记录本轮报告</button><button data-go="bugs">处理Bug与回归</button></div></div>';return;}
-  const p=S.project,stages=projectStages(),done=stages.slice(0,7).filter(s=>s[1]==='已完成').length;
+  const p=currentProjectData(),stages=projectStages(),done=stages.slice(0,7).filter(s=>s[1]==='已完成').length;
   $('overview-project-progress').textContent=`已完成 ${done}/7 项执行阶段 · 报告${p.reportAt?'已生成':'待生成'} · 当前工程师：student`;
   const rows=list=>list.map(([key,name,command])=>{const o=p.observations[key];return `<div class="project-check"><span class="${o?(o.ok?'check-ok':'check-fail'):''}">${o?(o.ok?'✓':'!'):'○'}</span><div><b>${name}</b><small>${o?esc(o.at+' · '+o.context+' · '+(o.ok?'符合检查预期':'存在异常，需复核')):'尚未采集'}</small></div><button data-cmd="${command}">${command}</button></div>`;}).join('');
   $('project-board').innerHTML=`<div class="panel project-intro"><span class="tag">END-TO-END SIT PROJECT</span><h2>银河麒麟 V10 服务器兼容性与稳定性测试项目</h2><p class="muted">身份：服务器SIT测试工程师 · 工程号 ${esc(p.id)} · 开始于 ${esc(p.started)}<br>系统已安装。亲自确认环境、执行测试、定位故障、跟进回归，最后基于实际记录生成报告。</p><div class="info-box">项目基线：测试盘4K随机读 / libaio / iodepth16 / numjobs1 / direct1 / 1G / 60s time_based，38,000–45,000 IOPS；双机千兆TCP约≥900Mbps、Retr≤10；压力须跑满设定时长、实际监控、无I/O/OOM错误。数据仅教学，不替代真实项目标准。</div><div class="project-meter"><i style="width:${done/7*100}%"></i></div></div><div class="stage-grid">${stages.map(([name,state,go],i)=>`<button class="stage-card" data-go="${go}"><small>PHASE ${String(i+1).padStart(2,'0')}</small><h3>${name}</h3><span class="${state==='已完成'?'check-ok':state==='发现异常'?'check-fail':'muted'}">${state}</span></button>`).join('')}</div><div class="two-col spaced"><div class="panel"><h2>阶段1 · 环境确认</h2>${rows(ENV_CHECKS)}</div><div class="panel"><h2>阶段2 · 安装后基础检查</h2>${rows(BASIC_CHECKS)}</div></div><div class="panel spaced"><div class="panel-title"><h2>阶段8 · 依据操作记录生成报告</h2><span class="tag">EVIDENCE BASED</span></div><p class="muted">fio ${p.fio.length}次 · 网络 ${p.network.length}次 · 已结束压力 ${p.stress.length}次 · 排查结论 ${p.cases.length}份 · 本项目Bug ${projectBugs().length}个。未执行项会明确列出，故障版与修复版记录都保留。</p><div class="inline-actions"><button class="primary" data-action="generate-report">生成/更新测试报告</button><button data-action="download-report">导出Markdown报告</button><button data-action="download-project">导出项目记录JSON</button></div><pre id="report-preview" class="light-log report-preview">${S.report?esc(S.report):'尚未生成报告。可以先生成一次，查看哪些项目还缺少证据。'}</pre></div>`;
 }
 function generateReport(){
   S.project.reportRevision=(S.project.reportRevision||0)+1;
-  const p=S.project,stages=projectStages(),bugs=projectBugs(),complete=stages.slice(0,7).every(s=>s[1]==='已完成'),issues=stages.some(s=>s[1]==='发现异常')||bugs.some(b=>b.status!=='已关闭');
+  const p=currentProjectData(),stages=projectStages(),bugs=projectBugs(),complete=stages.slice(0,7).every(s=>s[1]==='已完成'),issues=stages.some(s=>s[1]==='发现异常')||bugs.some(b=>b.status!=='已关闭');
   const conclusion=complete?'在本项目已声明的模拟范围和基线内完成验证；仅限教学，不代表真实硬件认证。':issues?'存在异常或未关闭缺陷，当前不能给出全部通过结论。':'执行范围尚不完整，需补足未执行或待验证项目，当前不能给出全部通过结论。';
   const rows=stages.map(([name,state],i)=>`| ${i+1} | ${name} | ${workVerdict(i===7?'已生成':state,i)} / ${i===7?'本次生成':state} |`).join('\n');
   const env=ENV_CHECKS.map(([key,label])=>{const o=p.observations[key];return `### ${label}\n${o?'采集时间：'+o.at+' / '+o.context+' / '+(o.ok?'符合':'异常')+'\n命令：`'+o.command+'`\n```text\n'+o.output+'\n```':'未采集，需实际执行确认。'}`;}).join('\n\n');
   const f=p.fio.map((r,i)=>r.error?`${i+1}. ${r.at} / ${r.scene||'正常环境'} / ${r.version} / 失败：${r.output}`:`${i+1}. ${r.at} / ${r.scene||'正常环境'} / v${r.version}\n   参数：${JSON.stringify(r.config)}\n   IOPS=${r.iops}，BW=${r.bw}MiB/s，slat/clat/lat=${r.slat}/${r.clat}/${r.lat}ms，P50/P95/P99=${r.p50}/${r.p95}/${r.p99}ms，模拟运行${r.elapsed.toFixed(2)}s`).join('\n');
   const net=p.network.map((r,i)=>`${i+1}. ${r.at} / ${r.scene||'正常环境'} / ${r.error?'失败：'+r.output:`v${r.version} ${r.udp?'UDP':'TCP'} ${r.direction} port=${r.port} t=${r.t}s P=${r.parallel}：${r.throughput}Mbps，Retr=${r.retrans}，Lost=${r.lost} (${r.loss}%)，Jitter=${r.jitter}ms，传输=${r.transfer}MBytes${r.local?'（本机回环，不用于物理链路结论）':''}`}`).join('\n');
   const stress=p.stress.map((r,i)=>`${i+1}. ${r.at} / ${r.scene||'正常环境'} / v${r.version}\n   ${r.command}\n   完成${r.elapsed}/${r.duration}s，结束方式=${r.reason}，监控=${r.observed?'有':'无'}，峰值CPU=${r.peakCPU.toFixed(1)}%，内存=${r.peakMemory.toFixed(1)}GiB，swap=${r.peakSwap.toFixed(1)}GiB，结果=${r.error?'记录异常':'未记录错误'}`).join('\n');
-  const cases=p.cases.map(c=>`- ${c.at} ${c.title} (${c.free?'自由排查':'引导排查'})\n  证据分析：${c.analysis}\n  处理与验证建议：${c.advice}\n  执行命令：${c.commands.join('；')}`).join('\n');
+  const cases=p.cases.map(c=>`- ${c.at} ${c.title} [${c.environment?.kernel||'旧记录未标注内核'}] (${c.free?'自由排查':'引导排查'})\n  证据分析：${c.analysis}\n  处理与验证建议：${c.advice}\n  执行命令：${c.commands.join('；')}`).join('\n');
   const bugText=bugs.map(b=>`### ${b.id} ${b.title}\n状态：${b.status} / 回归版本：${b.version||'未应用'}\n环境：${b.environment}\n步骤：${b.steps}\n预期：${b.expected}\n实际：${b.actual}\n频率：${b.frequency}\n结论：${b.conclusion}\n日志：\n\`\`\`text\n${b.logs}\n\`\`\`\n回归：${b.regressions?.length?b.regressions.map(r=>r.time+' '+r.version+' '+r.verdict+'\n'+r.evidence).join('\n'):'尚未执行'}`).join('\n\n');
-  p.reportAt=stamp();S.report=`# 银河麒麟V10服务器兼容性与稳定性测试报告（纯浏览器模拟）\n\n工程号：${p.id}\n生成时间：${p.reportAt} / Asia/Shanghai\n角色：student / 服务器SIT测试工程师（模拟）\n\n## 1. 测试范围与通过标准\n固定SimRack R200 / 麒麟V10组合的识别、驱动、文件I/O、双机网络、CPU/内存压力、故障、缺陷与回归。所有硬件和数据虚构，不包含真实Linux安装、真实硬件认证或真实长稳验证。\n性能基线：4K randread/libaio/iodepth16/numjobs1/direct1/size1G/runtime60/time_based，38000–45000IOPS；千兆双机吞吐≥900Mbps且Retr≤10；压力需监控且跑满设定时长，无I/O/OOM错误。\n\n## 2. 测试环境（实际采集证据）\n${env}\n\n## 3. 测试项目与执行结果\n| 阶段 | 项目 | 结果 |\n|---|---|---|\n${rows}\n\n### 专项用例结果\n| 用例 | 状态 | 证据 |\n|---|---|---|\n${detailedResultRows().map(r=>'| '+r[0]+' | '+r[1]+' | '+r[2].replace(/\n/g,' ; ').replace(/\|/g,'/')+' |').join('\n')}\n\n## 4. 性能数据与参数\n### fio\n${f||'未执行'}\n### iperf3\n${net||'未执行'}\n### stress\n${stress||'未完成压力任务'}${S.stress?'\n当前还有运行中的压力任务，尚未形成结束记录。':''}\n\n## 5. 发现的问题与排查结论\n${cases||'尚未完成故障定位；不能据此声称未发现问题。'}\n\n## 6. Bug记录与回归结果\n${bugText||'尚无本项目Bug记录，不能据此声称缺陷全部修复。'}\n\n## 7. 最终测试结论\n${conclusion}\n未完成项：${stages.slice(0,7).filter(s=>s[1]!=='已完成').map(s=>s[0]+'（'+s[1]+'）').join('、')||'本模拟声明范围内无未完成项'}\n\n报告仅反映生成时已保存的模拟操作；后续新操作请重新生成报告。\n`;
+  S.project.reportEnvironment=environmentKey(projectEngine().machine);S.project.reportAt=stamp();p.reportAt=S.project.reportAt;S.report=`# 银河麒麟V10服务器兼容性与稳定性测试报告（纯浏览器模拟）\n\n工程号：${p.id}\n运行环境：${kernelRelease(projectEngine().machine)} / 环境标识 ${environmentKey(projectEngine().machine)}\n历史数据保留在项目 JSON；以下通过判断仅使用当前环境的记录。\n生成时间：${p.reportAt} / Asia/Shanghai\n角色：student / 服务器SIT测试工程师（模拟）\n\n## 1. 测试范围与通过标准\n固定SimRack R200 / 麒麟V10组合的识别、驱动、文件I/O、双机网络、CPU/内存压力、故障、缺陷与回归。所有硬件和数据虚构，不包含真实Linux安装、真实硬件认证或真实长稳验证。\n性能基线：4K randread/libaio/iodepth16/numjobs1/direct1/size1G/runtime60/time_based，38000–45000IOPS；千兆双机吞吐≥900Mbps且Retr≤10；压力需监控且跑满设定时长，无I/O/OOM错误。\n\n## 2. 测试环境（实际采集证据）\n${env}\n\n## 3. 测试项目与执行结果\n| 阶段 | 项目 | 结果 |\n|---|---|---|\n${rows}\n\n### 专项用例结果\n| 用例 | 状态 | 证据 |\n|---|---|---|\n${detailedResultRows().map(r=>'| '+r[0]+' | '+r[1]+' | '+r[2].replace(/\n/g,' ; ').replace(/\|/g,'/')+' |').join('\n')}\n\n## 4. 性能数据与参数\n### fio\n${f||'未执行'}\n### iperf3\n${net||'未执行'}\n### stress\n${stress||'未完成压力任务'}${S.stress?'\n当前还有运行中的压力任务，尚未形成结束记录。':''}\n\n### 历史环境的测试记录（不计入当前通过判定）\n${historicalEnvironmentReport()}\n\n## 5. 发现的问题与排查结论\n${cases||'尚未完成故障定位；不能据此声称未发现问题。'}\n\n## 6. Bug记录与回归结果\n${bugText||'尚无本项目Bug记录，不能据此声称缺陷全部修复。'}\n\n## 7. 最终测试结论\n${conclusion}\n未完成项：${stages.slice(0,7).filter(s=>s[1]!=='已完成').map(s=>s[0]+'（'+s[1]+'）').join('、')||'本模拟声明范围内无未完成项'}\n\n报告仅反映生成时已保存的模拟操作；后续新操作请重新生成报告。\n`;
   persist();renderProject();return S.report;
 }
 function downloadText(name,text,type='text/plain;charset=utf-8'){const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -157,8 +143,9 @@ function renderFioComparison(){
   $('fio-comparison').innerHTML=`<p class="muted">选择两组实际完成的结果；显示参数差异，避免跨条件直接判高低。</p><div class="compare-picks">${list.slice(-10).map(r=>`<label class="checkbox"><input type="checkbox" data-compare="${r.id}" ${S.selectedFio.includes(r.id)?'checked':''}>${esc(r.at)} ${esc(r.config.bs)}/${esc(r.config.rw)} Q${r.config.depth}×${r.config.jobs} · ${r.iops} IOPS</label>`).join('')||'<p class="muted">先运行一组测试。</p>'}</div>${selected.length===2?comparisonTable(selected):'<div class="muted">已选 '+selected.length+'/2 组</div>'}`;
 }
 function comparisonTable([a,b]){
+  const environmentNotice=a.environmentKey===b.environmentKey&&a.conditions?.underLoad===b.conditions?.underLoad?'同一模拟环境':'环境不同：只能描述差异，不能直接推断升级收益或性能回退';
   const fields=[['target','目标'],['bs','块大小'],['rw','模式'],['depth','iodepth'],['jobs','numjobs'],['engine','ioengine'],['direct','direct'],['size','size'],['runtime','runtime'],['timeBased','time_based']];
-  return '<table><thead><tr><th>参数/结果</th><th>A</th><th>B</th></tr></thead><tbody>'+fields.map(([k,l])=>`<tr class="${a.config[k]!==b.config[k]?'different':''}"><td>${l}</td><td>${esc(a.config[k])}</td><td>${esc(b.config[k])}</td></tr>`).join('')+[['iops','IOPS'],['bw','BW MiB/s'],['lat','lat ms'],['p99','P99 ms']].map(([k,l])=>`<tr><td>${l}</td><td>${a[k]}</td><td>${b[k]}</td></tr>`).join('')+`</tbody></table><p class="muted">IOPS变化 ${((b.iops/a.iops-1)*100).toFixed(1)}%，P99变化 ${((b.p99/a.p99-1)*100).toFixed(1)}%。高亮行为参数差异；还要对照故障版本与背景负载。A=${esc(a.scene||'正常环境')} v${a.version}，B=${esc(b.scene||'正常环境')} v${b.version}。</p>`;
+  return '<p class="info-box">'+esc(environmentNotice)+'<br>A: '+esc(a.environment?.kernel||'未记录')+' / B: '+esc(b.environment?.kernel||'未记录')+'</p><table><thead><tr><th>参数/结果</th><th>A</th><th>B</th></tr></thead><tbody>'+fields.map(([k,l])=>`<tr class="${a.config[k]!==b.config[k]?'different':''}"><td>${l}</td><td>${esc(a.config[k])}</td><td>${esc(b.config[k])}</td></tr>`).join('')+[['iops','IOPS'],['bw','BW MiB/s'],['lat','lat ms'],['p99','P99 ms']].map(([k,l])=>`<tr><td>${l}</td><td>${a[k]}</td><td>${b[k]}</td></tr>`).join('')+`</tbody></table><p class="muted">IOPS变化 ${((b.iops/a.iops-1)*100).toFixed(1)}%，P99变化 ${((b.p99/a.p99-1)*100).toFixed(1)}%。高亮行为参数差异；还要对照故障版本与背景负载。A=${esc(a.scene||'正常环境')} v${a.version}，B=${esc(b.scene||'正常环境')} v${b.version}。</p>`;
 }
 
 function freeDiagnosisMatches(id,text){
@@ -200,8 +187,18 @@ function scoreAnswer(q,text){
   return {score,correct,missing,errors,details,clarity};
 }
 function renderKnowledge(){
-  const query=$('reference-search').value.trim().toLowerCase(),rows=COMMAND_KB.filter(r=>r.join(' ').toLowerCase().includes(query));
-  $('reference-list').innerHTML=rows.map(([category,example,purpose,usage,focus,output,followup])=>`<details class="knowledge-card"><summary><span class="tag">${category}</span><code>${esc(example)}</code><span>${purpose}</span></summary><div class="knowledge-body"><div class="two-col"><div><h3>为什么执行？</h3><p>${purpose}。${usage}。</p><h3>输出重点</h3><p>${focus}</p><h3>面试追问</h3><p>${followup}</p></div><div><h3>模拟输出示例（正常场景）</h3><pre class="light-log">${esc(output)}</pre><button data-cmd="${esc(example)}">执行并查看当前环境的实际模拟输出 ↗</button></div></div></div></details>`).join('')||'<p class="muted">未找到匹配知识，试试参数或命令名。</p>';
+  const query=$('reference-search').value.trim().toLowerCase();
+  const rows=COMMAND_KB.map(row=>({row,topic:commandTeaching(analyseInput(row[1]).segments[0])}));
+  const matches=rows.filter(({row,topic})=>[...row,...(topic||[])].join(' ').toLowerCase().includes(query));
+  $('reference-list').innerHTML=matches.map(({row,topic})=>{
+    const [category,example,purpose,usage,focus,output,followup]=row;
+    return `<details class="knowledge-card"><summary><span class="tag">${esc(category)}</span><code>${esc(example)}</code><span>${esc(purpose)}</span></summary>
+    <div class="knowledge-body"><div class="two-col">
+    <div><h3>这条命令回答什么？</h3><p>${esc(topic?.[0]||purpose+'。'+usage)}</p><h3>怎样解释结果？</h3><p>${esc(topic?.[1]||focus)}</p>
+    <h3>下一项验证</h3><p>${esc(topic?.[2]||followup)}</p></div>
+    <div><h3>教学输出样例</h3><pre class="light-log">${esc(output)}</pre><button data-study-command="${esc(example)}">填入实训终端</button></div>
+    </div></div></details>`;
+  }).join('')||'<p class="muted">未找到匹配知识，试试参数名、字段名或工作现象。</p>';
 }
 function renderLearning(){
   $('learning-center').innerHTML=`<div class="panel"><span class="tag">LEARNING CENTER</span><h2>知道为什么执行，才知道如何判断。</h2><p class="muted">先阅读目的与指标，再到实验室亲自验证。下列输出是教学样例；点击执行后，终端会反映当前故障状态。</p><div class="lesson-tabs">${LESSONS.map((l,i)=>`<button data-lesson="${i}" class="${i===0?'primary':''}">${l[0]}</button>`).join('')}</div><div id="lesson-content"></div></div><div class="panel spaced"><h2>术语速查</h2><div class="term-grid">${TERMS.map(([term,meaning])=>`<div><b>${term}</b><p>${meaning}</p></div>`).join('')}</div></div>`;renderLesson(0);$('learning-center').insertAdjacentHTML('afterbegin','<div class="panel spaced"><h2>先按成长路线学，再按模块查</h2><p class="muted">时间不固定也可以按任务推进。成长路线提供原理、实操、作业与复核；这里保留各工具速查，技术复盘继续可用。</p><button class="primary" data-go="academy">进入长期成长路线 →</button></div>');
