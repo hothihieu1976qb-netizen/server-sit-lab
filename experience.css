@@ -1,6 +1,5 @@
 .learning-experience .page-heading,
 .learning-experience #session-bar,
-.practice-terminal #work-task,
 .practice-terminal .quick-commands,
 .practice-terminal #terminal-scenario,
 .practice-terminal .terminal-footer span:last-child,
@@ -36,6 +35,32 @@
 .learn-task p.learn-concept { max-width: 69ch; }
 .learn-task #guided-boot { color: #41685d; font-size: 12px; }
 .learn-task details { grid-column: 1 / -1; margin-top: 10px; }
+.learn-task > [data-action="jump-guided-terminal"] { grid-column: 1 / -1; justify-self: start; margin-top: 16px; }
+#guided-submit:disabled { opacity: .55; }
+.work-tracks { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.work-tracks button[aria-pressed="true"] { border-color: #b8d796; color: #d4e9bb; background: #283824; }
+.work-tracks span { margin-inline-start: 5px; opacity: .7; }
+.work-order { margin-bottom: 14px; }
+.work-order h2 { font-size: 16px; }
+.work-order p, .work-order li, .work-handoff label { line-height: 1.8; }
+.work-order ul { padding-inline-start: 1.35em; }
+.guided-exercise .work-handoff { margin-top: 16px; }
+.work-handoff label { display: block; }
+.work-handoff small { display: block; opacity: .8; font-weight: normal; }
+.work-handoff-summary dd { margin: 4px 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.real-lab-entry { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin: 20px 0; }
+.real-lab-entry p, .real-lab-overview p, .real-lab-steps p { line-height: 1.8; margin: 8px 0; }
+.real-lab-overview { margin-bottom: 16px; }
+.real-lab-steps { display: grid; gap: 10px; margin-bottom: 16px; }
+.real-lab-steps summary { cursor: pointer; font-weight: 650; }
+.real-lab-steps pre { padding: 12px; background: #0d1215; border-radius: 8px; overflow: auto; color: #d6eadb; }
+#ops003-evidence-result { overflow-x: auto; }
+.field-evidence-body { overflow-x: auto; }
+.field-evidence-body table { width: 100%; margin: 10px 0; }
+.field-evidence-body td { white-space: normal; }
+.field-evidence-bars { display: grid; gap: 8px; max-width: 580px; margin-bottom: 12px; }
+.field-evidence-bars span { display: block; color: #becdc0; }
+.field-evidence-bars progress { display: block; width: 100%; accent-color: #c7ec9e; }
 .learn-commands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
 .learn-commands button { font: 12px/1.5 Consolas, monospace; white-space: normal; text-align: start; overflow-wrap: anywhere; }
 .practice-terminal { margin: 14px 0; }

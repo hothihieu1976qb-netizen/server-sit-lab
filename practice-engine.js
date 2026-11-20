@@ -9,8 +9,9 @@ const PRACTICE_COMMANDS = {
   '日志和操作':['dmesg -T','journalctl -b -k','journalctl -u sit-agent -b','systemctl --failed','systemctl status sit-agent','reboot','sim help','history','clear','help']
 };
 const PRACTICE_TOOLS = new Set(Object.values(PRACTICE_COMMANDS).flat().map(example=>example.split(' ')[0]));
-['dmidecode','modprobe','umount','uptime','tail','less','grep'].forEach(name=>PRACTICE_TOOLS.add(name));
+['dmidecode','modprobe','umount','uptime','tail','less','grep','curl','rpm','dnf','usermod','getent','install','date','pwd','cd','find','head','wc','chmod','command','printenv','export','jq','/usr/bin/jq',HOST_REPORT_SCRIPT].forEach(name=>PRACTICE_TOOLS.add(name));
 const PRACTICE_ACTIONS = {
+  'session':['在本课打开一个指定账号的新模拟会话，载入当时的组信息。','student、reportbot 或 guest；仅适用于账号课程。','sim session reportbot'],
   'kernel':['选择启动内核；当前运行内核直到 reboot 才会改变。','list 查看；select 4.19/5.10/6.6 设下次启动；rollback 选上一个版本。','sim kernel list'],
   'driver':['为指定教学内核安装模拟模块包，不改变运行驱动。','install 模块名 版本；再 modprobe 或 reboot 验证。','sim driver install simnic 5.10'],
   'save-ip':['保存下次启动使用的 IPv4 地址。','IPv4/前缀或 none；只改变启动配置。','sim save-ip 192.168.10.10/24'],
@@ -24,6 +25,7 @@ const PRACTICE_ACTIONS = {
   'nic-fw':['改变网卡模拟固件包，下次启动才应用。','on 安装；off 移除。','sim nic-fw on'],
   'hba-driver':['改变模拟 HBA 模块包的内核匹配条件，下次启动才应用。','match 匹配；mismatch 不匹配。','sim hba-driver match'],
   'service-port':['写入实验服务的端口配置。','1–65535；服务重启才应用。','sim service-port 9090'],
+  'app-port':['修改本课虚拟 /etc/status-app.env 的 APP_PORT。','1–65535；保存后还需 systemctl restart status-app。辅助动作仅适用于配置故障课。','sim app-port 8080'],
   'probe-service':['模拟本机访问实验服务。','目标端口；与本机监听值核对。','sim probe-service 9090'],
   'access':['模拟目标目录的 sitqa 组权限变更。','rw 允许创建；r 仅查看。','sim access rw'],
   'fs-mode':['切换模拟测试卷的运行挂载模式。','rw 可写；ro 只读。恢复代表已在隔离实验中完成安全处置。','sim fs-mode rw'],
@@ -49,6 +51,21 @@ function createPracticeRun(initial){
   appendLabLog(machine,machine.mounted?'systemd: Mounted /mnt/sit from /dev/sdb1':machine.mountUUID!==LAB_DISK_UUID?'systemd: /mnt/sit: UUID='+machine.mountUUID+' not found':'systemd: /mnt/sit not mounted');
   if(machine.readOnly)appendLabLog(machine,'EXT4-fs (sdb1): remounting filesystem read-only','kernel');
   startLabService(machine);
+  if(initial.workload==='status-web'){
+    machine.web=createWebWorkload();
+    if(initial.initialRelease){
+      machine.web.current=initial.initialRelease;
+      if(initial.appConfigFault){
+        machine.web.configPort='eight-thousand';
+        machine.previous.push({message:'status-app: failed to open /var/lib/status-app/cache: Permission denied; exit=13',unit:WEB_UNIT,transport:'system'});
+      }
+      logWebAppStart(machine);
+    }
+  }
+  if(initial.workload==='host-ops')machine.ops=createHostOps();
+  if(initial.fileTraining)initializeFileLab(machine,initial.fileTraining);
+  if(initial.accountTraining)initializeAccountLab(machine,initial.accountTraining);
+  if(initial.packageTraining)initializePackageLab(machine,initial.packageTraining);
   return {machine,events:[],sequence:0};
 }
 
@@ -74,6 +91,20 @@ function rebootPracticeMachine(machine){
   startLabNetworkBoot(machine);
   labStorageBoot(machine);
   startLabService(machine);
+  if(machine.web?.current)logWebAppStart(machine);
+  if(machine.ops){
+    machine.ops.active=false;
+    machine.ops.autoStartedBoot=machine.ops.enabled?machine.boot:null;
+    if(machine.ops.enabled)setHostCronActive(machine,true);
+  }
+  if(machine.accounts){
+    machine.accounts.sessionGroups=accountGroups(machine,machine.accounts.sessionUser);
+    machine.accounts.revision++;
+  }
+  if(machine.packageTraining){
+    machine.packageTraining.path=PACKAGE_DEFAULT_PATH;
+    machine.packageTraining.revision++;
+  }
   return machine.boot;
 }
 
@@ -88,7 +119,12 @@ function practiceState(machine){
     nicFirmware:machine.nicFirmware,nicBound:machine.nicBound,hbaCompatible:machine.hbaCompatible,hbaBound:machine.hbaBound,
     configuredPort:machine.configuredPort,servicePort:machine.servicePort,serviceStatus:machine.serviceStatus,
     fileWritable:machine.fileWritable,probeExists:machine.probeExists,readOnly:machine.readOnly,inodeUsed:machine.inodeUsed,
-    driveSerial:machine.driveSerial,leakMiB:machine.leakMiB,leakRate:machine.leakRate,rxErrors:machine.rxErrors,crcFault:machine.crcFault
+    driveSerial:machine.driveSerial,leakMiB:machine.leakMiB,leakRate:machine.leakRate,rxErrors:machine.rxErrors,crcFault:machine.crcFault,
+    appRelease:machine.web?.current||null,releaseRevision:machine.web?.revision||0,appConfigPort:machine.web?.configPort,appFailed:machine.web?.failed,
+    cwd:machine.fileTraining?.cwd,fileRevision:machine.fileTraining?.revision,
+    accountSession:machine.accounts?.sessionUser,accountRevision:machine.accounts?.revision,
+    packagePath:machine.packageTraining?.path,packageRevision:machine.packageTraining?.revision,reportRun:machine.ops?.runOrdinal,
+    reportAccess:machine.ops?.groupMember||false,reportDependency:machine.ops?.packageInstalled||false,cronActive:machine.ops?.active||false,cronEnabled:machine.ops?.enabled||false,cronSchedule:machine.ops?.schedule||false
   };
 }
 
@@ -101,6 +137,8 @@ function recordPracticeEvent(run,raw,result,previous,segment){
     ...result,failed:Boolean(result.failed),raw,at:stamp(),seq:++run.sequence,
     boot:state.boot,simTime:run.machine.simSeconds,address:state.address,savedAddress:state.savedAddress,
     revision:run.machine.revision,fromBoot:previous.boot,changed,
+    workingDirectory:previous.cwd,
+    workingUser:previous.accountSession,
     command:segment?.command, target:result.target??segment?.positionals[0], fromPeer:Boolean(segment?.fromB),
     delta:changed.length?Object.fromEntries(changed.map(key=>[key,[previous[key],state[key]]])):undefined
   };
@@ -122,6 +160,7 @@ function restorePracticeRun(run){
     ?{message:entry,transport:/^(kernel|simnic|simhba|oom|blk_update_request):/.test(entry)?'kernel':'system'}:entry;
   for(const machine of [run.machine,run.stepMachine].filter(Boolean)){
     initializeKernelMachine(machine);
+    if(machine.fileTraining)ensureWcDemo(machine);
     machine.journal=machine.journal.map(restoreLog);
     machine.previous=machine.previous.map(restoreLog);
   }
@@ -146,6 +185,8 @@ function simulatePracticeCommand(run,parsed){
   else if(!PRACTICE_TOOLS.has(segment.command))result=reject(segment.command+': unavailable in this workspace','unavailable');
   else if(segment.command==='help'||segment.command==='sim'&&segment.positionals[0]==='help'||segment.opts['--help']){
     const examples=segment.command==='sim'?Object.values(PRACTICE_ACTIONS).map(action=>action[2]):Object.values(PRACTICE_COMMANDS).flat();
+    if(machine.web)examples.push(...(segment.command==='sim'?['sim release status','sim release deploy v1','sim release rollback']:['curl -i '+WEB_PROXY_URL,'sim b journalctl -u nginx -b','sim release status']));
+    if(machine.ops)examples.push(...(segment.command==='sim'?['sim next-cron']:['id reportbot','rpm -q jq','dnf info jq','systemctl is-enabled crond','cat '+HOST_CRON_FILE,'date','sim next-cron']));
     const reference=segment.opts['--help']?segment.command+' '+Object.entries(segment.spec.options||{}).map(([name,info])=>name+(info[1]==='value'?' VALUE':'')).join(' '):examples.join('\n');
     result={output:reference,kind:'help'};
   }else if(segment.command==='history'){
@@ -157,20 +198,41 @@ function simulatePracticeCommand(run,parsed){
 }
 
 function runMachineSegment(machine,segment){
-  return runKernelModelCommand(machine,segment)||runHostLabCommand(machine,segment)||runLabSystemCommand(machine,segment)||runLabNetworkCommand(machine,segment);
+  return runPackageLabCommand(machine,segment)||runAccountLabCommand(machine,segment)||runFileLabCommand(machine,segment)||runHostOpsCommand(machine,segment)||runWebWorkCommand(machine,segment)||runKernelModelCommand(machine,segment)||runHostLabCommand(machine,segment)||runLabSystemCommand(machine,segment)||runLabNetworkCommand(machine,segment);
 }
 function runPracticePipeline(machine,parsed){
   const first=parsed.segments[0];
   if(!PRACTICE_TOOLS.has(first.command))return modelError(first.command+': unavailable in this workspace','rejected','unavailable');
-  const result=runMachineSegment(machine,first);if(result.failed)return result;
-  let output=result.output;
-  if(parsed.operators.includes('|')){
-    const filter=parsed.segments[1],term=filter.positionals[0];
-    if(!term||filter.positionals.length!==1)return modelError('grep: expected one text pattern for pipe input','rejected','arguments');
-    output=output.split('\n').filter(line=>filter.opts['-i']?line.toLowerCase().includes(term.toLowerCase()):line.includes(term)).join('\n');
+  const redirect=parsed.operators.find(op=>op==='>'||op==='>>');
+  const destination=redirect?parsed.operators.at(-1):null;
+  if(destination){
+    const failure=virtualFileError(machine,destination,true,!virtualFile(machine,destination));
+    if(failure)return modelError('redirect: '+failure[1],'rejected',failure[0],failure[2]);
+    if(redirect==='>'||!virtualFile(machine,destination))createVirtualFile(machine,destination,0,'');
   }
-  if(parsed.operators.includes('>')){const path=parsed.operators.at(-1);createVirtualFile(machine,path,output.length/1048576,output);output='';}
-  return {...result,output,pipeline:true};
+  let result=runMachineSegment(machine,first);
+  const sourcePath=result.target,sourceKind=result.kind;
+  const filters=[],errors=[];
+  const stream=value=>{
+    if(value.failed&&value.reason!=='no-match'){errors.push(value.output);return '';}
+    return value.output;
+  };
+  let output=stream(result);
+  for(const filter of parsed.segments.slice(1)){
+    const expected=filter.command==='grep'?1:0;
+    result=filter.positionals.length===expected?filterLabText(filter,output):modelError(filter.command+': pipe input expects no filename','text-filter','arguments',2);
+    filters.push({command:filter.command,opts:filter.opts,pattern:filter.positionals[0],matches:result.matches,newlineCount:result.newlineCount,selectedLines:result.selectedLines});
+    output=stream(result);
+  }
+  const content=output;
+  if(destination){
+    const before=machine.files[destination]?.content||'';
+    const text=redirect==='>>'?before+content:content;
+    createVirtualFile(machine,destination,new TextEncoder().encode(text).length/1048576,text);
+    machine.files[destination].provenance={raw:parsed.raw,sourcePath,boot:machine.boot};
+    output='';
+  }
+  return {...result,output:errors.join('\n')+(errors.length&&output?'\n':'')+output,pipeline:true,sourceKind,sourcePath,filters,destination,redirect,savedContent:destination?machine.files[destination].content:undefined};
 }
 
 function applyPracticeConfig(run,requested,keys){

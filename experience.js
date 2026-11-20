@@ -1,7 +1,7 @@
 'use strict';
 
 function currentGuidedCourse(){
-  return GUIDED_COURSES_BY_ID.get(S.experience.guidedId)||NETWORK_GUIDED_COURSE;
+  return GUIDED_COURSES_BY_ID.get(S.experience.guidedId)||GUIDED_COURSES[0];
 }
 function getGuidedRun(id=currentGuidedCourse().id){
   return S.experience.courses?.[id];
@@ -22,6 +22,7 @@ function practiceTerminal(page) {
   const layout = $('coach-layout');
   if (layout.parentElement !== host) host.append($('work-toolbar'), $('work-task'), layout);
   host.hidden = page === 'cases' && !next;
+  updatePracticePrompt();
   if (context === S.activePracticeTerminal) return;
 
   const output = $('terminal-output');
@@ -41,7 +42,7 @@ function practiceTerminal(page) {
     if (last) {
       S.lastLesson = practiceCommandLesson(last);
       S.currentMemoryQuiz = makeMemoryQuiz(S.lastLesson);
-      $('terminal-execution-status').textContent = last.failed ? 'ERROR' : 'COMPLETED';
+      $('terminal-execution-status').textContent = last.reason==='no-match'?'NO MATCH · exit 1':last.failed ? 'ERROR' : 'COMPLETED';
     }
   } else if (S.legacyTerminal) {
     const previous = S.legacyTerminal;
@@ -54,9 +55,16 @@ function practiceTerminal(page) {
   renderCommandLesson();
 }
 
+function updatePracticePrompt(){
+  const directory=currentPractice()?.machine.fileTraining?.cwd||'~';
+  const user=currentPractice()?.machine.accounts?.sessionUser||'student';
+  $('terminal-form').querySelector('label').textContent=user+'@sit-server-01:'+directory+'$';
+  document.querySelector('.terminal-title>div>span').textContent=user+'@sit-server-01: '+directory;
+}
+
 function printPracticeEvent(event) {
   if (event.raw === '[模拟机配置]') return;
-  appendTerminal('student@sit-server:~$ ' + event.raw, 'prompt');
+  appendTerminal((event.workingUser||'student')+'@sit-server-01:'+(event.workingDirectory||'~')+'$ ' + event.raw, 'prompt');
   if (event.output) appendTerminal(event.output);
 }
 
@@ -67,7 +75,7 @@ function practiceCommandLesson(event,parsed=analyseInput(event.raw,{practice:tru
     boot:'启动轮次',loadId:'活动作业号',elapsed:'作业模拟秒数',
     nicFirmware:'下次启动固件',nicBound:'网卡绑定',hbaCompatible:'下次启动 HBA 模块匹配',hbaBound:'HBA 绑定',
     configuredPort:'服务端口配置',servicePort:'实际服务监听',serviceStatus:'服务状态',fileWritable:'目录组写权限',readOnly:'只读保护',
-    inodeUsed:'inode 已用',driveSerial:'测试盘序列号',leakMiB:'进程额外驻留 MiB',rxErrors:'CRC 累计计数',crcFault:'接收误码条件'};
+    inodeUsed:'inode 已用',driveSerial:'测试盘序列号',leakMiB:'进程额外驻留 MiB',rxErrors:'CRC 累计计数',crcFault:'接收误码条件',appRelease:'应用发布版本',reportAccess:'巡检账号读权限',reportDependency:'jq 已安装',cronEnabled:'crond 开机启用',cronActive:'crond 当前运行',cronSchedule:'巡检计划已安装'};
   const changed=event.changed?.filter(key=>labels[key])||[];
   if(changed.length){
     const show=value=>value===null||value===''?'无':typeof value==='boolean'?(value?'开启':'关闭'):String(value);
@@ -81,13 +89,14 @@ function executePractice(parsed, run) {
   printPracticeEvent(event);
   renderKernelWorkbench();
   if (segment?.command === 'clear') $('terminal-output').replaceChildren();
-  $('terminal-execution-status').textContent = event.failed ? 'ERROR' : 'COMPLETED';
+  $('terminal-execution-status').textContent = event.reason==='no-match'?'NO MATCH · exit 1':event.failed ? 'ERROR' : 'COMPLETED';
   S.lastLesson = practiceCommandLesson(event,parsed);
   S.currentMemoryQuiz = makeMemoryQuiz(S.lastLesson);
   learnPracticeCommand(segment,event);
   persistPractice(run);
   renderCommandLesson();
   if (S.page === 'lesson') renderGuidedChecks();
+  updatePracticePrompt();
   if (S.page === 'cases') {
     const form = $('network-live-form');
     if (form && event.changed.length && !form.dataset.changed) $('case-live-fields').innerHTML = practiceConfigFields(run.machine);
@@ -100,15 +109,19 @@ function guidedChecks(run) {
   const step=currentGuidedCourse().steps[run.step];
   const events=run.events.slice(run.stepStart);
   const context={events,all:run.events,machine:run.machine};
-  return step.checks.map(([label,test])=>[Boolean(test(context)),label]);
+  return step.evaluate?step.evaluate(context):step.checks.map(([label,test])=>[Boolean(test(context)),label]);
 }
 
 function renderGuidedChecks() {
   const run = getGuidedRun(), host = $('guided-checks');
   if (!currentGuidedCourse().steps[run.step] || !host) return;
-  host.innerHTML = guidedChecks(run).map(([done,label])=>`<li class="${done?'done':''}"><span aria-hidden="true">${done?'✓':'○'}</span> ${label}<span class="sr-only">${done?'已取得':'待取得'}</span></li>`).join('');
+  const checks=guidedChecks(run);
+  host.innerHTML = checks.map(([done,label])=>`<li class="${done?'done':''}"><span aria-hidden="true">${done?'✓':'○'}</span> ${label}<span class="sr-only">${done?'已取得':'待取得'}</span></li>`).join('');
+  const collected=checks.filter(([done])=>done).length;
+  $('guided-check-status').textContent=collected===checks.length?'操作记录已齐，请选择下面理解题的答案。':`已完成 ${collected} / ${checks.length} 项操作。完成下面清单后，再选择理解题的答案。`;
+  $('guided-submit').disabled=collected!==checks.length;
   const load=run.machine.load;
-  $('guided-boot').textContent = '服务器 A · 第 ' + run.machine.boot + ' 次启动'+(load?' · 作业 #'+load.id+' 运行中 '+load.elapsed+'/'+load.duration+'s':'');
+  $('guided-boot').textContent = (run.machine.web?'应用主机 A':'本课模拟机')+' · 第 ' + run.machine.boot + ' 次启动'+(load?' · 作业 #'+load.id+' 运行中 '+load.elapsed+'/'+load.duration+'s':'')+(run.machine.ops?' · '+hostOpsTime(run.machine.ops.clock).replace('T',' ').replace('Z',' UTC'):'');
   renderGuidedMeasurements(run);
   renderGuidedEvidence(run);
 }
@@ -164,30 +177,17 @@ function renderGuidedMeasurements(run) {
 
 }
 
-function recommendedGuidedCourse() {
-  const last = GUIDED_COURSES_BY_ID.get(S.experience.guidedId);
-  if (last && getGuidedRun(last.id)?.step < last.steps.length) return last;
-  return GUIDED_COURSES.find(c=>(getGuidedRun(c.id)?.step ?? 0)<c.steps.length)||GUIDED_COURSES[0];
-}
-
-function renderLearningHome() {
-  const recommended = recommendedGuidedCourse(), run = getGuidedRun(recommended.id);
-  const done = GUIDED_COURSES.filter(c=>getGuidedRun(c.id)?.step===c.steps.length).length;
-  const totalSteps=GUIDED_COURSES.reduce((sum,c)=>sum+c.steps.length,0);
-  const finishedSteps=GUIDED_COURSES.reduce((sum,c)=>sum+Math.min(getGuidedRun(c.id)?.step||0,c.steps.length),0);
-  const percent=Math.round(finishedSteps/totalSteps*100), active=Boolean(run&&run.step<recommended.steps.length);
+function renderLearningCatalog() {
   const cards = GUIDED_COURSES.map((course,index)=>{
     const practice = getGuidedRun(course.id);
     const complete=practice?.step===course.steps.length;
     const status = complete?'已完成':practice?'进行中 · '+(practice.step+1)+' / '+course.steps.length:'未开始';
     const style=studioCourseStyle(course),progress=Math.min(practice?.step||0,course.steps.length)/course.steps.length*100;
-    return `<article class="panel guided-card tone-${style.hue}" data-level="${course.level}" data-topic="${esc(course.group)}" data-search="${esc((course.title+' '+course.description+' '+course.group+' '+course.id).toLowerCase())}"><div class="course-cover"><div class="course-cover-heading"><span>${style.name}</span><span>${String(index+1).padStart(2,'0')}</span></div>${studioCourseArt(style.kind)}<span class="course-difficulty">${course.level==='基础'?'初级 · FOUNDATION':'中级 · INTERMEDIATE'}</span><span class="course-cover-icon">${studioIcon(style.icon)}</span></div><div class="course-card-body"><div class="course-meta"><span>${course.group}</span><small class="${complete?'is-complete':''}">${complete?studioIcon('check'):''}${status}</small></div><h3>${course.title}</h3><p>${course.description}</p><div class="course-bottom"><span>${course.steps.length} 个实操步骤</span><button data-guided-course="${course.id}" aria-label="${complete?'查看复盘':practice?'继续实训':'开始学习'}：${esc(course.title)}">${complete?'查看复盘':practice?'继续实训':'开始学习'} ${studioIcon('arrow-up-right')}</button></div></div><div class="card-progress" aria-label="已完成步骤 ${practice?.step||0} / ${course.steps.length}"><i style="width:${progress}%"></i></div></article>`;
+    const track=course.track||'sit',trackLabel=track==='linux'?'Linux 工作实训':'服务器 SIT';
+    return `<article class="panel guided-card tone-${style.hue}" data-track="${track}" data-level="${course.level}" data-topic="${esc(course.group)}" data-search="${esc((trackLabel+' '+course.title+' '+course.description+' '+course.group+' '+course.id).toLowerCase())}"><div class="course-cover"><div class="course-cover-heading"><span>${style.name}</span><span>${String(index+1).padStart(2,'0')}</span></div>${studioCourseArt(style.kind)}<span class="course-difficulty">${course.level==='基础'?'初级 · FOUNDATION':'中级 · INTERMEDIATE'}</span><span class="course-cover-icon">${studioIcon(style.icon)}</span></div><div class="course-card-body"><div class="course-meta"><span>${trackLabel} · ${course.group}</span><small class="${complete?'is-complete':''}">${complete?studioIcon('check'):''}${status}</small></div><h3>${course.title}</h3><p>${course.description}</p><div class="course-bottom"><span>${course.steps.length} 个实操步骤</span><button data-guided-course="${course.id}" aria-label="${complete?'查看复盘':practice?'继续实训':'开始学习'}：${esc(course.title)}">${complete?'查看复盘':practice?'继续实训':'开始学习'} ${studioIcon('arrow-up-right')}</button></div></div><div class="card-progress" aria-label="已完成步骤 ${practice?.step||0} / ${course.steps.length}"><i style="width:${progress}%"></i></div></article>`;
   }).join('');
-  $('learning-home').innerHTML = `<section class="studio-hero"><div class="hero-copy"><div class="hero-eyebrow"><span class="hero-line"></span> YOUR NEXT ENGINEERING CHAPTER</div><h1>让每一次排查，<br>成为真正的<span class="hero-accent">能力<span class="accent-dot">.</span></span></h1><p>在浏览器里，走进你的服务器实验室。<br>从第一条命令，到独立定位问题、验证并交付。</p><div class="hero-actions"><button class="primary" data-guided-course="${recommended.id}">${studioIcon('terminal')}${active?'继续我的实训':'开始第一场实训'} ${studioIcon('arrow-right')}</button><button class="hero-secondary" data-studio="catalog">探索课程 ${studioIcon('chevron-down')}</button></div><div class="hero-footnote"><span>${studioIcon('check')} 完全离线</span><span>${studioIcon('check')} 按任务推进</span><span>${studioIcon('check')} 即刻动手</span></div></div>${studioServerArt()}</section>
-  <div class="studio-metrics"><div><span class="metric-glyph">${studioIcon('layers')}</span><span><b>${GUIDED_COURSES.length}<em>个</em></b><small>完整实训案例</small></span><span class="metric-mini">HANDS-ON</span></div><div><span class="metric-glyph">${studioIcon('workflow')}</span><span><b>${totalSteps}<em>步</em></b><small>从操作走向判断</small></span><span class="metric-mini">STEP BY STEP</span></div><div><span class="metric-glyph">${studioIcon('terminal')}</span><span><b>3<em>大</em></b><small>fio / iperf3 / stress</small></span><span class="metric-mini">CORE TOOLKIT</span></div><div><span class="metric-glyph">${studioIcon('circle-check')}</span><span><b>${done}<em>/ ${GUIDED_COURSES.length}</em></b><small>已完成课程</small></span><span class="metric-mini">YOUR PROGRESS</span></div></div>
-  <section class="continue-learning"><div class="learning-ring" style="--progress:${percent}%" aria-label="操作步骤完成 ${percent}%"><span>${percent}<small>%</small></span></div><div class="continue-copy"><span>${active?'CONTINUE LEARNING · 接着上次的进度':'RECOMMENDED NEXT · 下一站实训'}</span><h2>${recommended.title}</h2><p>${recommended.group} <i>·</i> ${recommended.steps.length} 个步骤 <i>·</i> ${active?'已完成 '+run.step+' 步，进度已保存':'读懂现象，动手验证，用证据作答'}</p></div><button data-guided-course="${recommended.id}">${active?'继续学习':'进入课程'} ${studioIcon('arrow-right')}</button></section>
-  <section id="course-catalog" class="course-catalog"><div class="section-heading guided-course-list-title"><div><p class="section-kicker">LEARNING PATH</p><h2>同页实训课程<span class="count-badge">${GUIDED_COURSES.length}</span></h2></div><span>每一次实操，都离独立工作更近一步。</span></div><div class="course-catalog-filter"><label class="catalog-search">${studioIcon('search')}<input id="catalog-search" type="search" placeholder="找到你想解决的问题…" aria-label="搜索实训课程"></label><label><span class="sr-only">难度</span><select id="catalog-level" aria-label="课程难度"><option value="">全部难度</option><option value="基础">初级</option><option value="进阶">中级</option></select></label><label><span class="sr-only">方向</span><select id="catalog-topic" aria-label="课程方向"><option value="">全部方向</option>${[...new Set(GUIDED_COURSES.map(c=>c.group))].map(group=>'<option>'+esc(group)+'</option>').join('')}</select></label><p id="catalog-count" aria-live="polite"></p></div><div class="guided-course-grid">${cards}</div><div id="catalog-empty" class="catalog-empty" hidden>${studioIcon('search')}<h3>暂时没有匹配的课程</h3><p>换一个关键词，或清除筛选看看全部实训。</p><button data-studio="clear-filter">清除筛选</button></div></section>
-  <div class="learn-home-links"><section class="panel studio-next"><span class="next-icon">${studioIcon('workflow')}</span><p class="section-kicker">GO DEEPER</p><h2>把单项技能，串成完整项目。</h2><p>进入 24 节进阶专题，练习测试方案、兼容性矩阵与项目交付。</p><button data-go="academy">探索进阶路径 ${studioIcon('arrow-up-right')}</button></section><section class="panel studio-next"><span class="next-icon">${studioIcon('flask-conical')}</span><p class="section-kicker">BRING YOUR OWN PROBLEM</p><h2>让工作中的问题，在这里重现。</h2><p>带上现场现象和日志，配置你的模拟服务器，开始新一轮排查。</p><button data-go="cases">打开案例实验室 ${studioIcon('arrow-up-right')}</button></section></div><div class="home-colophon"><span>SIT LAB</span><span>UNDERSTAND THE SYSTEM. OWN THE PROCESS.</span><a href="#reference">打开命令手册 ↗</a></div>`;
+  $('learning-catalog').innerHTML = `<section id="course-catalog" class="course-catalog"><div class="section-heading guided-course-list-title"><div><p class="section-kicker">LEARNING PATH</p><h2>同页实训课程<span class="count-badge">${GUIDED_COURSES.length}</span></h2></div><span>每一次实操，都离独立工作更近一步。</span></div><div class="course-catalog-filter"><label class="catalog-search">${studioIcon('search')}<input id="catalog-search" type="search" placeholder="找到你想解决的问题…" aria-label="搜索实训课程"></label><label><span class="sr-only">难度</span><select id="catalog-level" aria-label="课程难度"><option value="">全部难度</option><option value="基础">初级</option><option value="进阶">中级</option></select></label><label><span class="sr-only">方向</span><select id="catalog-topic" aria-label="课程方向"><option value="">全部方向</option>${[...new Set(GUIDED_COURSES.map(c=>c.group))].map(group=>'<option>'+esc(group)+'</option>').join('')}</select></label><p id="catalog-count" aria-live="polite"></p></div><div class="guided-course-grid">${cards}</div><div id="catalog-empty" class="catalog-empty" hidden>${studioIcon('search')}<h3>暂时没有匹配的课程</h3><p>换一个关键词，或清除筛选看看全部实训。</p><button data-studio="clear-filter">清除筛选</button></div></section>`;
+  $('course-catalog').insertAdjacentHTML('afterbegin',`<div class="work-tracks" role="group" aria-label="按学习路线筛选"><button data-course-track="" aria-pressed="true">全部课程</button><button data-course-track="linux" aria-pressed="false">Linux 工作实训 <span>${LINUX_WORK_COURSES.length}</span></button><button data-course-track="sit" aria-pressed="false">服务器 SIT <span>${GUIDED_COURSES.length-LINUX_WORK_COURSES.length}</span></button></div>`);
   $('catalog-level').value=S.ui.catalogLevel||'';
   $('catalog-topic').value=S.ui.catalogTopic||'';
   filterGuidedCatalog();
@@ -195,10 +195,12 @@ function renderLearningHome() {
 
 function filterGuidedCatalog(){
   const level=$('catalog-level').value, topic=$('catalog-topic').value;
+  const track=S.ui.catalogTrack||'';
   const query=($('catalog-search')?.value||'').trim().toLowerCase();
+  $('course-catalog').querySelectorAll('[data-course-track]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.courseTrack===track)));
   let visible=0;
   for(const card of document.querySelectorAll('.guided-card')){
-    card.hidden=Boolean(level&&level!==card.dataset.level||topic&&topic!==card.dataset.topic||query&&!card.dataset.search.includes(query));
+    card.hidden=Boolean(track&&track!==card.dataset.track||level&&level!==card.dataset.level||topic&&topic!==card.dataset.topic||query&&!card.dataset.search.includes(query));
     if(!card.hidden)visible++;
   }
   $('catalog-count').textContent='显示 '+visible+' / '+GUIDED_COURSES.length+' 个案例';
@@ -206,23 +208,50 @@ function filterGuidedCatalog(){
 
 }
 
+function workResultLabels(order,run){
+  const rows=run.workResults||order.rows(run,run.events.filter(event=>run.recoveryEvidence?.includes(event.seq)));
+  return rows.map(({label,status,refs})=>label+(status?'：'+status:'')+(refs?.length?'（记录 '+refs.map(seq=>'#'+seq).join('、')+'）':''));
+}
+
 function renderGuided() {
   const course=currentGuidedCourse(), run = getGuidedRun(), step = course.steps[run.step];
   $('guided-terminal').hidden = !step;
-  $('guided-intro').innerHTML = `<div class="learn-course-heading"><div><p class="learn-kicker">${course.group} · ${course.level==='基础'?'初级':'中级'}</p><h1>${course.title}</h1></div><button data-go="home">返回课程目录</button></div><ol class="learn-steps" style="--step-count:${course.steps.length}" aria-label="课程进度">${course.steps.map((entry,i)=>`<li class="${i===run.step?'current':i<run.step?'complete':''}" ${i===run.step?'aria-current="step"':''}><span>${i<run.step?'✓':i+1}</span>${entry.title}</li>`).join('')}</ol>`;
+  const starter=Boolean(step&&!step.independent&&STARTER_LESSONS.has(course.id));
+  $('view-lesson').classList.toggle('independent-reading',Boolean(step?.independent));
+  $('guided-intro').innerHTML = `<div class="learn-course-heading"><div><p class="learn-kicker">${course.group} · ${course.level==='基础'?'初级':'中级'}</p><h1>${course.title}</h1></div><button data-go="home">返回学习主线</button></div><ol class="learn-steps" style="--step-count:${course.steps.length}" aria-label="课程进度">${course.steps.map((entry,i)=>`<li class="${i===run.step?'current':i<run.step?'complete':''}" ${i===run.step?'aria-current="step"':''}><span>${i<run.step?'✓':i+1}</span>${entry.title}</li>`).join('')}</ol>`;
   $('guided-exercise').hidden = !step;
+  if(course.workOrder){
+    const order=course.workOrder;
+    $('guided-intro').insertAdjacentHTML('beforeend',`<section class="panel work-order" aria-label="当前工单"><h2>${order.id} · ${order.service}</h2><p>你的角色：${order.role}</p><ul>${order.hosts.map(([name,address,role])=>`<li><strong>${name}</strong> <code>${address}</code> · ${role}</li>`).join('')}</ul><p><strong>验收：</strong>${order.acceptance}</p>${order.hosts.length>1?'<p class="muted">在终端用 <code>sim b</code> 把支持的命令发给主机 B。</p>':''}</section>`);
+  }
   if (!step) {
     const next=GUIDED_COURSES[GUIDED_COURSES.indexOf(course)+1];
-    $('guided-intro').insertAdjacentHTML('beforeend',`<div class="panel learn-completion"><h2>本课已完成</h2><p>${course.recap}</p><div class="inline-actions">${course.challenge?'<button class="primary" data-action="challenge-case">进入独立练习 →</button>':''}${next?'<button data-guided-course="'+next.id+'">学习下一课</button>':''}<button data-action="export-guided">导出本课证据</button><button data-action="reset-guided">从头复练</button></div></div>`);
+    const nextMain=LINUX_PATH.some(stage=>stage.items.includes(course.id))?nextPathItem():null;
+    const readback=run.readingDraft&&course.steps.at(-1).readings?'<h3>已核对的现场记录</h3><ul>'+course.steps.at(-1).readings.map(([key,label])=>'<li>'+esc(label)+' · '+esc(run.readingDraft[key])+'</li>').join('')+'</ul>':'';
+    const order=course.workOrder;
+    const handoff=order?`<h3>验收清单</h3><ul>${workResultLabels(order,run).map(line=>'<li>'+esc(line)+'</li>').join('')}</ul><dl class="work-handoff-summary">${order.fields.map(([name,label])=>`<dt>${label}</dt><dd>${esc(run.handoff?.[name]||'未填写')}</dd>`).join('')}</dl>`:'';
+    $('guided-intro').insertAdjacentHTML('beforeend',`<div class="panel learn-completion"><h2>${course.workOrder?'工单已验收':'本课已完成'}</h2><p>${course.recap}</p>${readback}${handoff}<div class="inline-actions">${course.challenge?'<button class="primary" data-action="challenge-case">进入独立练习 →</button>':''}${nextMain?'<button class="primary" data-go="'+nextMain.route+'">接着练 · '+esc(nextMain.title)+'</button>':next&&next.track===course.track?'<button data-guided-course="'+next.id+'">学习下一课</button>':''}<button data-action="export-guided">${course.workOrder?'导出交接报告':'导出本课证据'}</button><button data-action="reset-guided">从头复练</button></div></div>`);
     return;
   }
-  const worked=step.example||LESSON_WALKTHROUGHS[course.id][run.step];
-  const example=`<details class="worked-example" ${run.step===0?'open':''}><summary>看懂一个例子 · ${esc(worked[0])}</summary>
-    <dl><dt>看到什么</dt><dd>${esc(worked[1])}</dd><dt>怎么读、能说明什么</dt><dd>${esc(worked[2])}</dd><dt>怎么继续验证</dt><dd>${esc(worked[3])}</dd></dl></details>`;
-  $('guided-intro').insertAdjacentHTML('beforeend',`<section class="panel learn-task"><div><h2>${step.title}</h2><p>${step.goal}</p><p class="learn-concept">${step.concept}</p></div><span id="guided-boot"></span>${example}<details><summary>本步操作提示${step.sample?'与输出样例':''}</summary>${step.sample?'<pre class="light-log course-output-sample">'+esc(step.sample)+'</pre>':''}<div class="learn-commands">${practiceCommandButtons(step.commands)}</div></details></section>`);
-  $('guided-exercise').innerHTML = `<section class="panel"><h2>本步证据</h2><ul id="guided-checks" class="learn-checks"></ul><details id="guided-evidence" hidden></details></section><form id="guided-answer" class="panel"><fieldset><legend>${step.question}</legend>${step.choices.map((choice,i)=>`<label class="learn-option"><input type="radio" name="choice" value="${i}" required>${choice}</label>`).join('')}</fieldset><p id="guided-feedback" class="learn-feedback" role="status"></p><div class="inline-actions"><button class="primary">检查并继续</button><button type="button" data-action="retry-guided-step">重做本步</button></div></form>`;
+  const worked=step.example||LESSON_WALKTHROUGHS[course.id]?.[run.step];
+  const example=worked?`<details class="worked-example" ${run.step===0?'open':''}><summary>看懂一个例子 · ${esc(worked[0])}</summary>
+    <dl><dt>看到什么</dt><dd>${esc(worked[1])}</dd><dt>怎么读、能说明什么</dt><dd>${esc(worked[2])}</dd><dt>怎么继续验证</dt><dd>${esc(worked[3])}</dd></dl></details>`:'';
+  $('guided-intro').insertAdjacentHTML('beforeend',`<section class="panel learn-task"><div><h2>${step.title}</h2><p>${step.goal}</p>${step.concept?'<p class="learn-concept">'+esc(step.concept)+'</p>':''}</div><span id="guided-boot"></span>${starter?'<section id="starter-guide" class="starter-guide" aria-label="逐条命令导读"></section>':''}${knowledgeShelf(step.knowledge||COURSE_KNOWLEDGE[course.id])}${starter?'':example}${step.independent?'':'<details><summary>本步操作提示'+(step.sample?'与输出样例':'')+'</summary>'+(step.sample?'<pre class="light-log course-output-sample">'+esc(step.sample)+'</pre>':'')+'<div class="learn-commands">'+practiceCommandButtons(step.commands)+'</div></details>'}</section>`);
+  $('guided-intro').querySelector('.learn-task').insertAdjacentHTML('beforeend','<button type="button" data-action="jump-guided-terminal">前往终端操作 ↓</button>');
+  $('guided-exercise').innerHTML = `<section class="panel"><h2 id="guided-evidence-heading" tabindex="-1">本步证据</h2><p id="guided-check-status" class="muted" role="status"></p><ul id="guided-checks" class="learn-checks"></ul><details id="guided-evidence" hidden></details></section><form id="guided-answer" class="panel"><fieldset><legend>${step.question}</legend>${step.choices.map((choice,i)=>`<label class="learn-option"><input type="radio" name="choice" value="${i}" required ${run.answerDraft?.step===run.step&&run.answerDraft.choice===i?'checked':''}>${choice}</label>`).join('')}</fieldset><p id="guided-feedback" class="learn-feedback" role="status"></p><div class="inline-actions"><button class="primary" id="guided-submit" aria-describedby="guided-check-status">检查并继续</button><button type="button" data-action="retry-guided-step">重做本步</button></div></form>`;
+  if(step.readings){
+    const fields=step.readings.map(([name,label])=>`<label>${esc(label)}<input data-reading name="${name}" autocomplete="off" required value="${esc(run.readingDraft?.[name]||'')}"></label>`).join('');
+    $('guided-answer').insertAdjacentHTML('afterbegin',`<fieldset class="path-readings"><legend>填写本轮实测值</legend>${fields}</fieldset>`);
+    $('guided-submit').textContent='提交独立验收';
+  }
+  if(step.handoff){
+    const fields=course.workOrder.fields.map(([name,label,question])=>`<label>${label}<small>${question}</small><textarea data-work-handoff name="${name}" rows="3" maxlength="1200" required>${esc(run.handoff?.[name]||'')}</textarea></label>`).join('');
+    $('guided-feedback').insertAdjacentHTML('beforebegin',`<fieldset class="work-handoff"><legend>工单交接说明</legend>${fields}</fieldset>`);
+    $('guided-submit').textContent='提交工单';
+  }
   $('guided-exercise').insertAdjacentHTML('beforeend','<section id="guided-measurements" class="panel guided-measurements" hidden></section>');
   renderGuidedChecks();
+  if(starter)renderStarterGuide();
 }
 
 function practiceCommandButtons(commands) {
@@ -358,23 +387,41 @@ function createNetworkCase(entries, initial) {
   return c;
 }
 
-function startGuided(reset=false,id=currentGuidedCourse().id) {
-  const course=GUIDED_COURSES_BY_ID.get(id);
-  if(!course)return;
+function prepareGuidedCourse(course,reset) {
+  const {id}=course,previous=getGuidedRun(id),switched=S.experience.guidedId!==id;
   S.experience.guidedId=id;
-  if (reset || !getGuidedRun(id)) {
+  if (reset || !previous) {
     const run = createPracticeRun({...LAB_NETWORK,...course.initial});
     saveGuidedRun(id,{...run,step:0,stepStart:0,stepMachine:structuredClone(run.machine)});
   }
-  persistPractice(getGuidedRun(id));
-  showPage('lesson');
+  if(reset||!previous||switched)persistPractice(getGuidedRun(id));
+}
+
+function startGuided(reset=false,id=currentGuidedCourse().id) {
+  if(GUIDED_COURSES_BY_ID.has(id))showPage('lesson/'+id,true,reset);
 }
 
 function submitGuidedAnswer(form) {
-  const run = getGuidedRun(), step = currentGuidedCourse().steps[run.step], feedback = $('guided-feedback');
+  const run = getGuidedRun(), course=currentGuidedCourse(), step=course.steps[run.step], feedback = $('guided-feedback');
   const missing = guidedChecks(run).find(([done])=>!done);
   if (missing) {feedback.textContent = '本步还需'+missing[1]+'。请在终端操作后再检查。';return;}
-  if (Number(new FormData(form).get('choice')) !== step.answer) {feedback.textContent = '再对照本轮输出。'+step.feedback;return;}
+  const values=new FormData(form);
+  if(step.readings){
+    const mismatch=step.readings.find(([name,,expected])=>String(values.get(name)||'').trim()!==expected(run.machine));
+    if(mismatch){feedback.textContent='请重新核对「'+mismatch[1]+'」与本轮输出。';return;}
+  }
+  if (!values.has('choice')||Number(values.get('choice')) !== step.answer) {feedback.textContent = step.independent?'请再对照本轮原始记录，选择证据足以支持的判断。':'再对照本轮输出。'+step.feedback;return;}
+  if(step.handoff){
+    const nextMain=LINUX_PATH.some(stage=>stage.items.includes(course.id))?nextPathItem():null;
+    const readback=run.readingDraft&&course.steps.at(-1).readings?'<h3>已核对的现场记录</h3><ul>'+course.steps.at(-1).readings.map(([key,label])=>'<li>'+esc(label)+' · '+esc(run.readingDraft[key])+'</li>').join('')+'</ul>':'';
+    const order=course.workOrder;
+    const handoff=Object.fromEntries(order.fields.map(([name])=>[name,values.get(name).trim()]));
+    if(Object.values(handoff).some(value=>!value)){feedback.textContent='请补齐四项交接内容。';return;}
+    run.handoff=handoff;
+    run.closedAt=stamp();
+    run.workResults=order.rows(run,run.events.slice(run.stepStart));
+  }
+  if(step.readings)run.readingDraft=Object.fromEntries(step.readings.map(([name])=>[name,values.get(name).trim()]));
   run.step++;
   run.stepStart = run.events.length;
   run.stepMachine = structuredClone(run.machine);
@@ -385,7 +432,8 @@ function submitGuidedAnswer(form) {
 }
 
 function renderExperiencePage() {
-  if (S.page === 'home') renderLearningHome();
+  if (S.page === 'home') renderLinuxPath();
+  if (S.page === 'catalog') renderLearningCatalog();
   if (S.page === 'lesson') renderGuided();
   if (S.page === 'cases') renderCases();
   if (S.page === 'mistakes') renderGuidedHistory();
@@ -398,11 +446,25 @@ function renderGuidedHistory() {
     const status=run.step===c.steps.length?'已完成':'第 '+(run.step+1)+' 步 / '+c.steps.length;
     return `<li><button data-guided-course="${c.id}">${c.title}</button> · ${status}</li>`;
   }).join('');
-  $('guided-history').innerHTML='<h2>同页实训进度</h2>'+(list?'<ul>'+list+'</ul>':'<p>开始实训后，可在这里继续上次的课程。</p>')+'<button data-go="home">打开课程目录</button>';
+  $('guided-history').innerHTML='<h2>同页实训进度</h2>'+(list?'<ul>'+list+'</ul>':'<p>开始实训后，可在这里继续上次的课程。</p>')+'<button data-go="catalog">打开课程目录</button>';
 }
 
 function handleExperienceClick(button) {
   const action = button.dataset.action;
+  if(button.hasAttribute('data-starter-index')){
+    const run=getGuidedRun();run.walkthrough={step:run.step,index:Number(button.dataset.starterIndex)};
+    deferPracticeNote(run);renderStarterGuide();
+    $('starter-guide').scrollIntoView({block:'start'});return true;
+  }
+  if(button.hasAttribute('data-path-sit')){
+    S.ui.catalogTrack='sit';S.ui.catalogLevel=S.ui.catalogTopic='';showPage('catalog');return true;
+  }
+  if(button.hasAttribute('data-course-track')){
+    S.ui.catalogTrack=button.dataset.courseTrack;
+    for(const name of ['level','topic','search'])$('catalog-'+name).value='';
+    S.ui.catalogLevel=S.ui.catalogTopic='';
+    filterGuidedCatalog();return true;
+  }
   if(button.dataset.guidedCourse){startGuided(false,button.dataset.guidedCourse);return true;}
   if(button.dataset.practiceEvidence){
     const event=currentPractice()?.events.find(entry=>entry.seq===Number(button.dataset.practiceEvidence));
@@ -422,11 +484,22 @@ function handleExperienceClick(button) {
     $('command').focus();
     return true;
   }
-  if (action === 'open-guided' || action === 'reset-guided') {startGuided(action === 'reset-guided');return true;}
+  if (action === 'jump-guided-terminal' || action === 'jump-guided-evidence') {
+    const target=$(action==='jump-guided-terminal'?'command':'guided-evidence-heading');
+    target.focus({preventScroll:true});
+    target.scrollIntoView({block:'center'});
+    return true;
+  }
+  if (action === 'open-guided' || action === 'reset-guided') {
+    if(action==='reset-guided'&&!window.confirm('从头复练会清除本课进度和证据。建议先导出本课证据，确定继续吗？'))return true;
+    startGuided(action === 'reset-guided');return true;
+  }
   if (action === 'retry-guided-step') {
     const run = getGuidedRun();
+    if(run.events.length>run.stepStart&&!window.confirm('重做将清除本步的操作记录，并恢复本步开始时的模拟环境。确定继续吗？'))return true;
     if (!run.stepMachine) {startGuided(true);return true;}
-    saveGuidedRun(currentGuidedCourse().id,{...run,machine:structuredClone(run.stepMachine),events:run.events.slice(0,run.stepStart)});
+    pendingPracticeNotes.delete(run);
+    saveGuidedRun(currentGuidedCourse().id,{...run,machine:structuredClone(run.stepMachine),events:run.events.slice(0,run.stepStart),handoff:undefined,readingDraft:undefined,answerDraft:undefined});
     persistPractice(getGuidedRun());
     showPage('lesson');
     toast('已恢复本步开始时的环境。');
@@ -443,7 +516,17 @@ function handleExperienceClick(button) {
   }
   if(action==='export-guided'){
     const course=currentGuidedCourse(),run=getGuidedRun();
-    downloadText(course.id+'-practice.md','# '+course.title+'\n\n'+course.recap+'\n\n'+reportTrace(run.events));
+    if(course.workOrder){
+      const order=course.workOrder;
+      const notes=order.fields.map(([name,label])=>'### '+label+'\n\n'+run.handoff[name]).join('\n\n');
+      const hosts=order.hosts.map(([name,address,role])=>`- ${name} · ${address} · ${role}`).join('\n');
+      const acceptance=workResultLabels(order,run).map(line=>'- '+line).join('\n');
+      downloadText(order.id+'-handoff.md',`# ${order.id} · ${course.title}\n\n模拟工单 · ${run.closedAt}\n\n## 环境\n\n${hosts}\n\n## 工单验收\n\n${acceptance}\n\n## 交接说明（学员填写）\n\n${notes}\n\n## 操作证据\n\n${reportTrace(run.events)}`);
+    }else{
+      const readings=course.steps.at(-1).readings||[];
+      const results=run.readingDraft?'\n\n## 学员核对的现场读数\n\n'+readings.map(([key,label])=>'- '+label+' · '+run.readingDraft[key]).join('\n'):'';
+      downloadText(course.id+'-practice.md','# '+course.title+'\n\n'+course.recap+results+'\n\n'+reportTrace(run.events));
+    }
     return true;
   }
   if (action === 'reset-network-case') {
@@ -512,6 +595,19 @@ function initExperience() {
   }
   window.addEventListener('pagehide',flushPracticeNotes);
   document.addEventListener('input',event=>{
+    if(event.target.name==='choice'&&event.target.form?.id==='guided-answer'){
+      const run=getGuidedRun();run.answerDraft={step:run.step,choice:Number(event.target.value)};deferPracticeNote(run);return;
+    }
+    if(event.target.hasAttribute('data-reading')){
+      const run=getGuidedRun();run.readingDraft??={};run.readingDraft[event.target.name]=event.target.value;deferPracticeNote(run);return;
+    }
+    if(event.target.hasAttribute('data-work-handoff')){
+      const run=getGuidedRun();
+      run.handoff??={};
+      run.handoff[event.target.name]=event.target.value;
+      deferPracticeNote(run);
+      return;
+    }
     if(event.target.id==='case-conclusion'){
       currentPractice().conclusion=event.target.value;
       deferPracticeNote(currentPractice());

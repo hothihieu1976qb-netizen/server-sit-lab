@@ -1,0 +1,51 @@
+.sidebar .brand>span:last-child{white-space:nowrap;font-size:20px;letter-spacing:-.04em}
+#learning-home{max-width:1120px;margin-inline:auto}
+.linux-hero{display:flex;align-items:end;justify-content:space-between;gap:24px;padding:clamp(18px,3vw,44px) 0 24px;border-bottom:1px solid var(--line)}
+.linux-hero h1{font-size:clamp(29px,4vw,51px);line-height:1.2;letter-spacing:-.045em;margin:8px 0}
+.linux-hero p,.path-current p,.stage-body p,.path-branches p{margin:5px 0;color:#abb7b8}
+.linux-hero .section-kicker,.path-current .section-kicker{color:var(--accent)}
+.path-counter{display:grid;flex-shrink:0;text-align:right;font-size:12px;color:#aeb9b7}
+.path-counter strong{color:var(--accent);font:600 33px/1.2 var(--mono)}
+.path-counter small{font-size:16px;color:#8e9b99}
+.path-current{display:flex;align-items:flex-start;gap:18px;padding:clamp(20px,3vw,34px);margin:22px 0 30px;border:1px solid #496145;border-left:4px solid var(--accent);border-radius:14px;background:linear-gradient(108deg,#1c2a23,#141b1e 80%)}
+.path-icon{display:grid;flex:0 0 auto;place-items:center;width:40px;height:40px;border-radius:10px;background:#bdeb8414;color:var(--accent)}
+.path-current h2{margin:5px 0;font-size:clamp(19px,2.3vw,29px);line-height:1.4}
+.path-current p{max-width:65ch}.path-current .inline-actions{margin:16px 0 0}
+.path-map a,.stage-body a{color:#d1e8bd;text-underline-offset:3px}
+.path-map .section-heading{gap:12px}.path-map .section-heading a{font-size:13px}
+.path-stage{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden}
+.path-stage summary{display:flex;align-items:center;gap:15px;padding:15px 19px;cursor:pointer;list-style:none}
+.path-stage summary::-webkit-details-marker{display:none}
+.path-stage summary:after{content:'+';font:20px var(--mono);color:var(--muted)}.path-stage[open] summary:after{content:'−'}
+.path-stage summary strong,.path-stage summary small{display:block}.path-stage summary small,.stage-count,.stage-body li small{font-size:12px;color:#a4afad}
+.stage-count{margin-left:auto;white-space:nowrap}
+.stage-body{padding:0 19px 15px clamp(19px,6vw,74px)}.stage-body ul{list-style:none;margin:10px 0 0;padding:0}
+.stage-body li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:8px 0}
+.stage-body li small{flex-shrink:0}.stage-body a{text-decoration:none}.stage-body a:hover{text-decoration:underline}
+.path-branches{margin:30px 0}.path-branches>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.path-branches article,.knowledge-shelf{padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.path-branches h3,.knowledge-shelf h3{margin:0 0 6px;font-size:16px}.path-branches p{margin-bottom:12px}
+.knowledge-shelf{grid-column:1/-1;margin:8px 0 12px}.knowledge-shelf details{padding:7px 0;color:var(--ink);border-top:1px solid var(--line)}.knowledge-shelf summary{cursor:pointer}
+.knowledge-shelf p,.learn-task .knowledge-shelf p{font-size:13px;color:#adb9bb;margin:5px 0}
+.path-readings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px}
+.path-readings label{min-width:0}.independent-reading #guided-terminal .command-coach,.independent-reading #lesson-toggle,.independent-reading #guided-terminal .quick-commands{display:none}
+.starter-guide{grid-column:1/-1;min-width:0;border:1px solid #54704e;border-radius:12px;background:#17211d;padding:clamp(18px,3vw,30px);margin:10px 0}
+.starter-guide h3{font-size:23px;line-height:1.5;margin:18px 0 9px}.starter-guide h4{font-size:17px;margin:22px 0 8px;color:#e7eee5}
+.learn-task .starter-guide p,.starter-guide li{font-size:16px;line-height:1.9;color:#d1dbd5;margin:10px 0}
+.starter-tabs{display:flex;flex-wrap:wrap;gap:8px}.starter-tabs button{font:13px/1.6 var(--mono);overflow-wrap:anywhere;text-align:left}
+.starter-tabs [aria-pressed=true]{color:#d7f8b3;border-color:#bdeb8480;background:#2b4028}
+.starter-guide pre{font:14px/1.9 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #ffffff19;border-radius:8px;padding:14px 17px;background:#111a17;color:#e6eee9;margin:9px 0}
+.starter-guide .starter-command{color:#d8f7b7;font-size:16px}
+.starter-demo,.starter-do{padding:16px;border:1px solid #8aaf6740;border-radius:9px;background:#c5e99b08;margin:18px 0}
+.starter-demo h4,.starter-do h4{margin-top:0}.starter-guide summary{font-size:14px;cursor:pointer;color:#bdcdbb}
+.starter-guide .learn-commands{margin:10px 0}.starter-guide .learn-commands button{font-size:14px;padding:11px 15px}
+.starter-guide td,.starter-guide th{font-size:14px;line-height:1.8;vertical-align:top}.starter-guide td code{overflow-wrap:anywhere}
+.starter-guide table{width:100%;table-layout:fixed}.starter-guide th,.starter-guide td{overflow-wrap:anywhere}.starter-guide .starter-fields th:first-child{width:23%}
+.teaching-terms{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:9px;background:#101a1640}.teaching-terms h3{font-size:18px;margin:0 0 9px}
+.teaching-terms details{border-top:1px solid var(--line);padding:8px 0}.teaching-terms summary{font-size:15px;font-weight:600}.teaching-terms p{font-size:15px;line-height:1.9;color:#c4d3c8;margin:7px 0}
+.real-command-guide{border:1px solid var(--line);border-radius:9px;margin:10px 0;overflow:hidden}.real-command-guide>summary{padding:13px 16px;cursor:pointer}.real-command-guide>summary code{white-space:pre-wrap;overflow-wrap:anywhere}
+.real-command-guide .starter-guide{margin:0;border:0;border-radius:0}.real-lab-steps .starter-guide p{font-size:16px;line-height:1.9}.real-lab-steps>details>p{font-size:15px;line-height:1.9}
+.lesson-paper .topic-prelude,.lesson-paper #academy-command-guide{font-size:16px;line-height:1.9}.lesson-paper .course-concepts p{font-size:15px;line-height:1.9}
+@media(max-width:720px){.learn-task .starter-guide p,.starter-guide li{font-size:15px}.starter-guide h3{font-size:21px}.starter-tabs{flex-wrap:nowrap;overflow:auto;padding-bottom:7px}.starter-tabs button{flex-shrink:0;max-width:250px}.starter-guide pre{font-size:13px}}
+.independent-reading #guided-terminal .coach-layout{grid-template-columns:minmax(0,1fr)}
+@media(max-width:720px){.path-branches>div{grid-template-columns:1fr}.linux-hero{align-items:center}.path-current>.path-icon{display:none}.path-stage summary{padding:12px;gap:10px}.stage-body{padding:0 12px 12px}.path-readings{grid-template-columns:1fr}.path-current .inline-actions{flex-wrap:wrap}.path-counter strong{font-size:25px}}

@@ -1,0 +1,7 @@
+services:
+  gateway:
+    image: sitlab/ops-platform:v2
+    build:
+      context: .
+      args:
+        RELEASE: v2

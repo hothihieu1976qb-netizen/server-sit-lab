@@ -164,7 +164,7 @@ function initKernelWorkbench(){
 }
 function renderKernelWorkbench(){
   const host=$('kernel-workbench');if(!host)return;
-  host.hidden=assessmentActive()||!['lesson','cases','terminal','hardware','overview','fio','network','stress','faults','project'].includes(S.page);
+  host.hidden=assessmentActive()||S.page==='lesson'&&currentGuidedCourse().track==='linux'&&currentGuidedCourse().level==='基础'&&!currentGuidedCourse().workOrder||!['lesson','cases','terminal','hardware','overview','fio','network','stress','faults','project'].includes(S.page);
   if(host.hidden)return;
   const m=currentMachine(),p=currentPractice(),context=p?S.page+':'+(S.experience.guidedId||'')+':'+m.envEpoch:S.project.id;
   initializeKernelMachine(m);

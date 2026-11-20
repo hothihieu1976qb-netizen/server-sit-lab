@@ -1,0 +1,445 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
+
+const require = createRequire(import.meta.url);
+const {chromium} = require('playwright');
+const browser = await chromium.launch({channel: process.env.SIT_BROWSER_CHANNEL});
+try {
+  const page = await browser.newPage({viewport:{width:720,height:900},reducedMotion:'reduce'});
+  page.setDefaultTimeout(8000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const home = new URL('./index.html', import.meta.url).href;
+  const inventory = `${home}#lesson/inventory`;
+  const web = `${home}#lesson/linux-web-release`;
+  const ops = `${home}#lesson/linux-host-ops`;
+  const command = page.locator('#command');
+  const submit = page.locator('#guided-submit');
+  const output = page.locator('#terminal-output');
+  const run = async line => {
+    await command.fill(line);
+    await command.press('Enter');
+  };
+
+  await page.goto(home);
+  assert.equal(await page.locator('#learning-home h1').innerText(),'我的 Linux 学习主线');
+  if(process.env.LINUX_HOME_PREVIEW){
+    await page.setViewportSize({width:1440,height:1050});
+    await page.screenshot({path:process.env.LINUX_HOME_PREVIEW});
+    await page.setViewportSize({width:720,height:900});
+  }
+  const submitChoice=async index=>{
+    assert.ok(await submit.isEnabled(),await page.locator('#guided-checks').innerText());
+    await page.locator('#guided-answer input[type=radio]').nth(index).check();
+    await submit.click();
+  };
+  const continueTo=id=>page.locator('.learn-completion [data-go="lesson/'+id+'"]').click();
+  await page.locator('.path-current .primary').click();
+  assert.match(page.url(),/#lesson\/linux-first-login$/);
+  await page.locator('.knowledge-shelf summary').first().click();
+  assert.match(await page.locator('.knowledge-shelf').innerText(),/UID/);
+  for(const line of ['whoami','id','hostnamectl'])await run(line);
+  await submitChoice(1);
+  await page.goto(home);
+  await page.locator('.path-current .primary').click();
+  await page.reload();
+  assert.match(await page.locator('.learn-steps [aria-current]').innerText(),/区分两种版本/);
+  for(const line of ['cat /etc/os-release','uname -r'])await run(line);
+  await submitChoice(0);
+  await continueTo('linux-directory');
+  for(const line of ['id','ls -ld /mnt/sit','touch /mnt/sit/permission-check','ls -l /mnt/sit/permission-check'])await run(line);
+  await submitChoice(2);
+  await continueTo('linux-service-basics');
+  for(const line of ['systemctl status status-app','ss -lntp'])await run(line);
+  await submitChoice(1);
+  for(const line of ['curl -i http://127.0.0.1:8080/health','curl -i http://192.168.10.20/health'])await run(line);
+  await submitChoice(0);
+  await continueTo('linux-service-logs');
+  await run('systemctl --failed');
+  assert.match(await output.locator('pre').last().innerText(),/status-app.service loaded failed failed/);
+  for(const line of ['systemctl status status-app','ss -lntp','curl -i http://192.168.10.20/health'])await run(line);
+  await run('systemctl status status-app');
+  assert.match(await page.locator('#command-lesson').innerText(),/78\/CONFIG/);
+  await submitChoice(1);
+  await run('journalctl -u status-app -b -1');
+  assert.match(await output.locator('pre').last().innerText(),/Permission denied/);
+  await run('journalctl -u status-app -b -k');
+  assert.equal(await output.locator('pre').last().innerText(),'-- No entries --');
+  assert.ok(await submit.isDisabled());
+  for(const line of ['journalctl -u status-app -b','cat /etc/status-app.env'])await run(line);
+  await submitChoice(1);
+  await run('sudo systemctl restart status-app');
+  assert.match(await output.locator('pre').last().innerText(),/failed/);
+  for(const line of ['sim app-port 8080','cat /etc/status-app.env','systemctl status status-app'])await run(line);
+  assert.match(await output.locator('pre').last().innerText(),/Active: failed/);
+  await page.reload();
+  assert.match(await page.locator('.learn-steps [aria-current]').innerText(),/修正配置/);
+  for(const line of ['sudo systemctl restart status-app','systemctl status status-app','ss -lntp','journalctl -u status-app -b','curl -i http://127.0.0.1:8080/health','curl -i http://192.168.10.20/health'])await run(line);
+  await submitChoice(2);
+  assert.ok(await submit.isDisabled());
+  for(const line of ['systemctl status status-app','ss -lntp','journalctl -u status-app -b','curl -i http://127.0.0.1:8080/health','curl -i http://192.168.10.20/health'])await run(line);
+  for(const [field,value] of Object.entries({port:'8080',exit:'0',local:'200',gateway:'200'}))await page.locator('[data-reading][name="'+field+'"]').fill(value);
+  await submitChoice(0);
+  await continueTo('linux-foundation-check');
+  assert.ok(await submit.isDisabled());
+  assert.ok(!await page.locator('#guided-terminal .command-coach').isVisible());
+  for(const line of ['id','uname -r','ls -ld /mnt/sit','ss -lntp','curl -i http://127.0.0.1:8081/health','curl -i http://192.168.10.20/health'])await run(line);
+  const readings={kernel:'4.19.90-sit.sim',group:'sitqa',port:'8081',local:'200',gateway:'200'};
+  for(const [field,value] of Object.entries(readings))await page.locator('[data-reading][name="'+field+'"]').fill(value);
+  await submitChoice(1);
+  assert.match(await page.locator('#guided-feedback').innerText(),/网关 HTTP 状态码/);
+  await page.locator('[name="gateway"]').fill('502');
+  await submit.click();
+  await page.locator('.learn-completion').waitFor();
+  await page.goto(home);
+
+  assert.match(await page.locator('.path-current').innerText(),/从目录定位/);
+  assert.match(await page.locator('.path-counter strong').innerText(),/1.*7/);
+  await page.locator('.path-current .primary').click();
+  for(const line of ['pwd','cd /srv/status','ls -l /srv/status','cd logs','pwd','ls'])await run(line);
+  await page.reload();
+  await run('pwd');
+  assert.match(await output.locator('pre').last().innerText(),/srv\/status\/logs/);
+  await submitChoice(1);
+  for(const line of ['find /srv/status -type f -name "*.log"','cat /srv/status/README.txt','cat /srv/status/config/app.conf'])await run(line);
+  await submitChoice(2);
+  await continueTo('linux-read-logs');
+  for(const line of ['head -n 2 /srv/status/logs/access.log','tail -n 2 /srv/status/logs/access.log','head -n 2 /srv/status/logs/access.log.1'])await run(line);
+  await submitChoice(1);
+  for(const line of ['cat /tmp/wc-demo.txt','wc -l /tmp/wc-demo.txt','less /srv/status/logs/access.log','wc -l /srv/status/logs/access.log'])await run(line);
+  await submitChoice(1);
+  await continueTo('linux-filter-save');
+  for(const line of ['grep -niF error /srv/status/logs/access.log','grep -F NOT_PRESENT /srv/status/logs/access.log'])await run(line);
+  assert.match(await page.locator('#terminal-execution-status').innerText(),/NO MATCH/);
+  await submitChoice(0);
+  await run('cat /srv/status/logs/access.log | grep -F "a|b" | wc -l');
+  assert.equal((await output.locator('pre').last().innerText()).trim(),'0');
+  await run('cat /tmp/missing.log > /tmp/errors.log');
+  assert.match(await output.locator('pre').last().innerText(),/No such/);
+  await run('wc -l /tmp/errors.log');
+  assert.match(await output.locator('pre').last().innerText(),/^0 /);
+  for(const line of ['cat /srv/status/logs/access.log | grep -F ERROR | wc -l','cat /srv/status/logs/access.log | grep -F ERROR > /tmp/errors.log','cat /tmp/errors.log','wc -l /tmp/errors.log'])await run(line);
+  await submitChoice(1);
+  for(const line of ['grep -F ERROR /srv/status/logs/access.log >> /tmp/errors.log','wc -l /tmp/errors.log','grep -F ERROR /srv/status/logs/access.log > /tmp/errors.log','wc -l /tmp/errors.log','wc -l /srv/status/logs/access.log'])await run(line);
+  await submitChoice(2);
+  await continueTo('linux-log-handoff');
+  assert.ok(await submit.isDisabled());
+  for(const line of ['find /srv/status -type f -name "*.log"','head -n 2 /srv/status/logs/access.log','tail -n 2 /srv/status/logs/access.log','wc -l /srv/status/logs/access.log','grep -nF ERROR /srv/status/logs/access.log','grep -F ERROR /srv/status/logs/access.log > /tmp/incident.log','cat /tmp/incident.log','wc -l /tmp/incident.log'])await run(line);
+  const fileReadings={source:'/srv/status/logs/access.log',count:'3',requests:'2',first:'r101',status:'200'};
+  for(const [field,value] of Object.entries(fileReadings))await page.locator('[data-reading][name="'+field+'"]').fill(value);
+  await submitChoice(0);
+  assert.match(await page.locator('#guided-feedback').innerText(),/首条 ERROR/);
+  await page.locator('[data-reading][name="first"]').fill('q201');
+  await page.reload();
+  assert.equal(await page.locator('[data-reading][name="first"]').inputValue(),'q201');
+  await submit.click();
+  await page.locator('.learn-completion').waitFor();
+  const [fileReport]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'导出本课证据'}).click()]);
+  assert.match(await readFile(await fileReport.path(),'utf8'),/q201/);
+  await page.goto(home);
+  assert.match(await page.locator('.path-current').innerText(),/账号加组后/);
+  await page.locator('.path-current .primary').click();
+  for(const line of ['whoami','id','id reportbot','getent group hostops','ls -ld /srv/host-report/inbox','sudo ls -l /srv/host-report/inbox/checks.json','sudo -u reportbot cat /srv/host-report/inbox/checks.json'])await run(line);
+  await submitChoice(1);
+  for(const line of ['sim session reportbot','id','sudo usermod -aG hostops reportbot','id'])await run(line);
+  assert.doesNotMatch(await output.locator('pre').last().innerText(),/hostops/);
+  await page.reload();
+  await run('id');
+  assert.doesNotMatch(await output.locator('pre').last().innerText(),/hostops/);
+  for(const line of ['id reportbot','sudo -u reportbot id','sudo -u reportbot cat /srv/host-report/inbox/checks.json','sudo -u guest cat /srv/host-report/inbox/checks.json','sim session student'])await run(line);
+  await submitChoice(2);
+  await continueTo('linux-directory-access');
+  for(const line of ['id reportbot','ls -ld /srv/host-report/inbox','sudo chmod g-x /srv/host-report/inbox','sudo -u reportbot ls /srv/host-report/inbox','sudo -u reportbot cat /srv/host-report/inbox/checks.json','sudo chmod g+x /srv/host-report/inbox','ls -ld /srv/host-report/inbox','sudo -u reportbot cat /srv/host-report/inbox/checks.json'])await run(line);
+  await submitChoice(0);
+  for(const line of ['sudo chmod g-r /srv/host-report/inbox/checks.json','ls -ld /srv/host-report/inbox','sudo ls -l /srv/host-report/inbox/checks.json','sudo -u reportbot cat /srv/host-report/inbox/checks.json','sudo chmod g+r /srv/host-report/inbox/checks.json','sudo ls -l /srv/host-report/inbox/checks.json','sudo -u reportbot cat /srv/host-report/inbox/checks.json'])await run(line);
+  await submitChoice(1);
+  for(const line of ['ls -ld /srv/host-report/outbox','sudo -u reportbot touch /srv/host-report/outbox/proof.txt','sudo chmod g+w /srv/host-report/outbox','sudo -u reportbot touch /srv/host-report/outbox/proof.txt','ls -ld /srv/host-report/outbox','sudo ls -l /srv/host-report/outbox/proof.txt','sudo -u guest touch /srv/host-report/outbox/proof.txt'])await run(line);
+  await submitChoice(2);
+  await continueTo('linux-access-handoff');
+  for(const line of ['id reportbot','ls -ld /srv/host-report/inbox','sudo ls -l /srv/host-report/inbox/checks.json','sudo -u reportbot cat /srv/host-report/inbox/checks.json','chmod g+x /srv/host-report/inbox'])await run(line);
+  assert.match(await output.locator('pre').last().innerText(),/Permission denied/);
+  await run('sudo usermod -aG hostops reportbot');
+  await run('sudo -u reportbot cat /srv/host-report/inbox/checks.json');
+  assert.match(await output.locator('pre').last().innerText(),/Permission denied/);
+  assert.ok(await submit.isDisabled());
+  for(const line of ['sudo chmod 0777 /srv/host-report/inbox','sudo chmod 0644 /srv/host-report/inbox/checks.json','sudo -u guest cat /srv/host-report/inbox/checks.json'])await run(line);
+  assert.doesNotMatch(await output.locator('pre').last().innerText(),/Permission denied/);
+  assert.ok(await submit.isDisabled());
+  for(const line of ['sudo chmod 0750 /srv/host-report/inbox','sudo chmod 0640 /srv/host-report/inbox/checks.json','id reportbot','ls -ld /srv/host-report/inbox','sudo ls -l /srv/host-report/inbox/checks.json','ls -ld /srv/host-report/outbox','sudo -u reportbot cat /srv/host-report/inbox/checks.json','sudo -u guest cat /srv/host-report/inbox/checks.json'])await run(line);
+  for(const [field,value] of Object.entries({group:'hostops',directory:'0750',file:'0640',original:'auditlog'}))await page.locator('[data-reading][name="'+field+'"]').fill(value);
+  await submitChoice(1);
+  await page.goto(home);
+  assert.match(await page.locator('.path-current').innerText(),/软件源里有包/);
+  assert.match(await page.locator('.path-counter strong').innerText(),/3.*7/);
+  await page.locator('.path-current .primary').click();
+  for(const line of ['rpm -q jq','dnf info jq','sudo -u reportbot /opt/host-report/bin/collect'])await run(line);
+  await submitChoice(0);
+  await run('dnf install jq');
+  assert.match(await output.locator('pre').last().innerText(),/requires root/);
+  for(const line of ['sudo dnf install jq','rpm -q jq','rpm -ql jq','jq --version','sudo -u reportbot /opt/host-report/bin/collect','cat /var/lib/host-report/latest.json'])await run(line);
+  await submitChoice(1);
+  await continueTo('linux-command-path');
+  for(const line of ['jq --version','rpm -q jq','rpm -ql jq','printenv PATH','command -v jq','/usr/bin/jq --version'])await run(line);
+  assert.match(await output.locator('pre').last().innerText(),/jq-1.6/);
+  await submitChoice(1);
+  await run('export PATH=/usr/bin:/bin');
+  await page.reload();
+  await run('printenv PATH');
+  assert.equal((await output.locator('pre').last().innerText()).trim(),'/usr/bin:/bin');
+  for(const line of ['command -v jq','jq --version','sudo -u reportbot /opt/host-report/bin/collect','cat /var/lib/host-report/latest.json'])await run(line);
+  await submitChoice(0);
+  await continueTo('linux-package-handoff');
+  for(const line of ['rpm -q jq','rpm -ql jq','dnf info jq','printenv PATH','command -v jq','/usr/bin/jq --version','cat /var/lib/host-report/latest.json'])await run(line);
+  assert.equal(JSON.parse(await output.locator('pre').last().innerText()).boot,0);
+  for(const line of ['export PATH=/usr/bin:/bin','printenv PATH','command -v jq','jq --version'])await run(line);
+  assert.ok(await submit.isDisabled());
+  for(const line of ['sudo -u reportbot /opt/host-report/bin/collect','cat /var/lib/host-report/latest.json'])await run(line);
+  for(const line of ['export PATH=/usr/local/bin','export PATH=/usr/bin:/bin'])await run(line);
+  assert.ok(await submit.isDisabled());
+  for(const line of ['printenv PATH','command -v jq','jq --version','sudo -u reportbot /opt/host-report/bin/collect','cat /var/lib/host-report/latest.json'])await run(line);
+  const freshReport=JSON.parse(await output.locator('pre').last().innerText());
+  assert.equal(freshReport.runId,3);
+  for(const [field,value] of Object.entries({program:'/usr/bin/jq',version:'1.6',source:'manual',run:'1',boot:'1'}))await page.locator('[data-reading][name="'+field+'"]').fill(value);
+  await submitChoice(0);
+  assert.match(await page.locator('#guided-feedback').innerText(),/runId/);
+  await page.locator('[data-reading][name="run"]').fill(String(freshReport.runId));
+  await submit.click();
+  await page.locator('.learn-completion').waitFor();
+  await page.goto(home);
+  assert.match(await page.locator('.path-current').innerText(),/恢复每日巡检/);
+  assert.match(await page.locator('.path-counter strong').innerText(),/4.*7/);
+
+
+  await page.getByRole('button',{name:'打开真实工单'}).click();
+  assert.equal(page.url(),`${home}#real-labs`);
+  assert.match(await page.locator('#environment-badge').innerText(),/真实容器实训/);
+  assert.match(await page.locator('#view-real-labs').innerText(),/Docker Engine 和 Compose/);
+  const evidenceFile=page.locator('#ops003-evidence-file'),evidenceStatus=page.locator('#ops003-evidence-status');
+  await evidenceFile.setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{}')});
+  await page.getByText('无法读取 OPS-003 证据', {exact:false}).waitFor();
+  if(process.env.SIT_BACKUP_EVIDENCE){
+    await evidenceFile.setInputFiles(process.env.SIT_BACKUP_EVIDENCE);
+    await page.getByText('导入核对：PASS',{exact:false}).waitFor();
+    assert.match(await evidenceStatus.innerText(),/导入核对：PASS/);
+    await page.locator('#ops003-handoff-notes').fill('保留原库。LAB-1004 未进入用来恢复的备份，需要核对后补录。');
+    const [handoffDownload]=await Promise.all([page.waitForEvent('download'),page.locator('#ops003-handoff-export').click()]);
+    assert.match(await readFile(await handoffDownload.path(),'utf8'),/恢复环境缺少的原库记录：LAB-1004/);
+  }
+  for(const id of ['004','005','006','007']){
+    await page.getByRole('button',{name:new RegExp('OPS-'+id+' ·')}).click();
+    assert.equal(page.url(),`${home}#real-labs/ops-${id}`);
+    assert.match(await page.locator('#field-real-lab h2').first().innerText(),id==='006'?/Kubernetes/:/./);
+  }
+  if(process.env.SIT_PLATFORM_EVIDENCE){
+    const evidence=join(process.env.SIT_PLATFORM_EVIDENCE,'ops-007-evidence.json');
+    await page.locator('#field-evidence-file').setInputFiles(evidence);
+    await page.getByText('已导入 OPS-007 证据。').waitFor();
+    assert.equal(await page.locator('.field-evidence-bars progress').count(),3);
+    assert.match(await page.locator('#field-evidence-result').innerText(),/验收：PASS/);
+    await page.locator('#field-evidence-notes').fill('保持相同高并发复测，扩展后排队下降。');
+    const [fieldReport]=await Promise.all([page.waitForEvent('download'),page.locator('#field-evidence-export').click()]);
+    assert.match(await readFile(await fieldReport.path(),'utf8'),/OPS-007/);
+    await page.getByRole('button',{name:/OPS-006 ·/}).click();
+    await page.locator('#field-evidence-file').setInputFiles(evidence);
+    await page.getByText('该证据不适用于 OPS-006。',{exact:false}).waitFor();
+    await page.getByRole('button',{name:/OPS-007 ·/}).click();
+    assert.match(await page.locator('#field-evidence-notes').inputValue(),/排队下降/);
+  }
+  await page.goto(home);
+  await page.getByRole('button',{name:'进入 SIT 案例'}).click();
+  assert.equal(await page.locator('.guided-card[data-track="sit"]:visible').count(), 20);
+  await page.locator('.guided-card [data-guided-course="inventory"]').click();
+  assert.equal(page.url(), inventory);
+  assert.match(await page.locator('#work-task').innerText(), /记入当前课程/);
+  assert.ok(await submit.isDisabled());
+  await page.getByRole('button',{name:'前往终端操作'}).click();
+  assert.ok(await command.evaluate(element => document.activeElement === element));
+  await run('uname -a');
+  assert.match(await page.locator('#guided-check-status').innerText(), /1 \/ 3/);
+  assert.match(await page.locator('#command-lesson').innerText(), /uname/);
+  await run('cat /etc/os-release');
+  await run('dmidecode -t system');
+  await run('dmidecode -t bios');
+  await page.getByRole('button',{name:'查看本步证据'}).click();
+  assert.ok(await page.locator('#guided-evidence-heading').evaluate(element => document.activeElement === element));
+  assert.ok(await submit.isEnabled());
+
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button',{name:'重做本步'}).click();
+  assert.ok(await submit.isEnabled());
+  await page.getByLabel('先比对两次 uname 输出并记录版本').check();
+  await submit.click();
+  assert.match(await page.locator('.learn-steps [aria-current="step"]').innerText(), /核对 CPU、内存和驱动/);
+  assert.ok(await submit.isDisabled());
+
+  await page.goto(`${home}#lesson/network`);
+  await page.waitForFunction(() => S.page === 'lesson' && currentGuidedCourse().id === 'network');
+  assert.doesNotMatch(await output.innerText(), /dmidecode/);
+  await run('ip -br link');
+  assert.match(await output.innerText(), /enp3s0/);
+  await page.goto(inventory);
+  await page.reload();
+  assert.match(await page.locator('.learn-steps [aria-current="step"]').innerText(), /核对 CPU、内存和驱动/);
+  assert.match(await output.innerText(), /dmidecode -t bios/);
+  assert.doesNotMatch(await output.innerText(), /ip -br link/);
+
+  await page.goto(web);
+  await page.locator('.work-order').waitFor();
+  const answer = async index => {
+    assert.ok(await submit.isEnabled(), await page.locator('.learn-steps [aria-current="step"]').innerText()+': '+await page.locator('#guided-checks').innerText());
+    await page.locator('#guided-answer input[type=radio]').nth(index).check();
+    await submit.click();
+  };
+  const gateway = 'curl -i http://192.168.10.20/health';
+  const local = 'curl -i http://127.0.0.1:8080/health';
+  for (const line of ['hostnamectl','ip -br addr','df -hT','sim b ss -lnt','sim release status']) await run(line);
+  await answer(1);
+  for (const line of ['sim release deploy v1','systemctl status status-app',local,gateway]) await run(line);
+  assert.match(await output.locator('pre').last().innerText(), /HTTP\/1.1 200 OK[\s\S]*"release":"v1"/);
+  await answer(0);
+
+  await run('sim release deploy v2');
+  assert.ok(await submit.isDisabled());
+  await run(gateway);
+  assert.match(await output.locator('pre').last().innerText(), /HTTP\/1.1 502 Bad Gateway/);
+  await page.locator('#command-lesson summary').filter({hasText:'命令结构、参数与取值'}).click();
+  assert.match(await page.locator('#command-lesson').innerText(), /输出包含 HTTP 状态行/);
+  await answer(2);
+  await page.reload();
+  assert.match(await page.locator('.learn-steps [aria-current="step"]').innerText(), /用证据定位 502/);
+  await run('sim b journalctl -u nginx -b');
+  assert.match(await output.locator('pre').last().innerText(), /connection refused.*192\.168\.10\.10:8080/);
+  await run('sim b cat /etc/nginx/conf.d/status.conf');
+  await run('ss -lnt');
+  assert.match(await output.locator('pre').last().innerText(), /0\.0\.0\.0:8081/);
+  await run('curl -i http://127.0.0.1:8081/health');
+  assert.match(await output.locator('pre').last().innerText(), /HTTP\/1.1 200 OK[\s\S]*"release":"v2"/);
+  await answer(0);
+
+  await run('sim release rollback');
+  await run(gateway);
+  assert.ok(await submit.isDisabled());
+  await run(local);
+  const notes = {
+    impact:'v2 上线后用户入口出现 HTTP 502。',
+    diagnosis:'网关日志显示 8080 连接被拒绝；代理配置指向 8080，而 v2 的监听是 8081。',
+    recovery:'回滚到 v1 后，本机和用户入口都返回 HTTP 200 和 v1。',
+    followup:'下一次发布前由应用和网关维护者确认端口契约，并验证入口。'
+  };
+  for (const [name, note] of Object.entries(notes)) await page.locator(`[data-work-handoff][name="${name}"]`).fill(note);
+  await page.reload();
+  assert.equal(await page.locator('[name="diagnosis"]').inputValue(), notes.diagnosis);
+  await answer(1);
+  await page.getByRole('heading',{name:'工单已验收'}).waitFor();
+  const [download] = await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'导出交接报告'}).click()]);
+  const report = await readFile(await download.path(),'utf8');
+  assert.match(report,/用户入口：HTTP 200，版本 v1（记录 #\d+）/);
+  assert.match(report,/v2 重新发布验证：NOT RUN/);
+  assert.ok(report.includes(notes.diagnosis));
+
+  await page.goto(ops);
+  await page.getByRole('heading',{name:/OPS-002/}).waitFor();
+  const runAll = async lines => {for (const line of lines) await run(line);};
+  const collect = 'sudo -u reportbot /opt/host-report/bin/collect';
+  const artifact = 'cat /var/lib/host-report/latest.json';
+  const cronLog = 'journalctl -u crond -b';
+  const schedule = '/etc/cron.d/host-report';
+  const lastOutput = () => output.locator('pre').last().innerText();
+  await runAll(['hostnamectl','id reportbot','ls -ld /srv/host-report/inbox','rpm -q jq']);
+  assert.match(await lastOutput(), /not installed/);
+  await run('systemctl is-enabled crond');
+  await answer(0);
+  await run(collect);
+  assert.match(await lastOutput(), /Permission denied/);
+  await run('usermod -aG hostops reportbot');
+  assert.match(await lastOutput(), /requires root/);
+  await runAll(['sudo usermod -aG hostops reportbot','id reportbot','sudo -u reportbot cat /srv/host-report/inbox/checks.json']);
+  await answer(1);
+  await runAll(['dnf info jq','sudo dnf install jq','rpm -q jq',collect,artifact]);
+  assert.match(await lastOutput(), /"source": "manual"/);
+  await answer(2);
+  await runAll(['sudo systemctl start crond','systemctl is-active crond','systemctl is-enabled crond']);
+  assert.equal(await lastOutput(),'disabled');
+  await runAll(['sudo systemctl enable crond',cronLog]);
+  await answer(0);
+  await runAll(['cat /opt/host-report/host-report.cron','sudo install -o root -g root -m 0644 /opt/host-report/host-report.cron '+schedule,'cat '+schedule,'ls -l '+schedule]);
+  await answer(1);
+
+  await runAll(['sudo systemctl disable crond','sudo reboot','sudo systemctl enable --now crond','systemctl status crond']);
+  assert.doesNotMatch(await page.locator('#guided-checks li').filter({hasText:'crond 已开机启用'}).getAttribute('class'), /done/);
+  await runAll(['sudo reboot','id reportbot','rpm -q jq','systemctl status crond','cat '+schedule,'ls -l '+schedule,artifact]);
+  assert.match(await lastOutput(), /"boot": 1[\s\S]*"source": "manual"/);
+  await run('sim wait 1199');
+  await run(cronLog);
+  assert.doesNotMatch(await lastOutput(), /CMD/);
+  assert.ok(await submit.isDisabled());
+  await page.reload();
+  await runAll(['sim wait 1',cronLog]);
+  assert.match(await lastOutput(), /CROND: \(reportbot\) CMD/);
+  await run('tail -n 6 /var/log/host-report.log');
+  assert.match(await lastOutput(), /02:15:00Z .*source=cron exit=0/);
+  await run(artifact);
+  assert.match(await lastOutput(), /"boot": 3[\s\S]*"source": "cron"/);
+  await run(collect);
+  assert.ok(await submit.isDisabled());
+  await runAll(['sim next-cron',cronLog,'tail -n 6 /var/log/host-report.log',artifact]);
+
+  const handoffNotes={baseline:'账号缺少 hostops，jq 未安装，crond 未启用。',changes:'只加读组，从 ops-approved 安装 jq 并安装审核过的计划。',verification:'重启后服务启用且运行，cron 派发、退出 0 和新报告时间一致。',followup:'下一班检查最新报告时间；无报告先按派发与脚本结果分层查。'};
+  for (const [name, note] of Object.entries(handoffNotes)) await page.locator(`[data-work-handoff][name="${name}"]`).fill(note);
+  await answer(2);
+  await page.getByRole('heading',{name:'工单已验收'}).waitFor();
+  const [opsDownload]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'导出交接报告'}).click()]);
+  const opsReport=await readFile(await opsDownload.path(),'utf8');
+  assert.equal(opsDownload.suggestedFilename(),'OPS-002-handoff.md');
+  assert.match(opsReport,/本次启动的 cron 派发、脚本退出 0 和新报告相符：PASS（记录 #/);
+  assert.ok(opsReport.includes(handoffNotes.verification));
+  await page.goto(inventory);
+  await page.waitForFunction(() => currentGuidedCourse().id === 'inventory');
+  await run('sim release status');
+  assert.match(await output.locator('pre').last().innerText(), /unavailable in this workspace/);
+  await run('rpm -q jq');
+  assert.match(await lastOutput(), /unavailable in this workspace/);
+  const teaching=await browser.newPage({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
+  teaching.setDefaultTimeout(8000);
+  teaching.on('pageerror',error=>errors.push(error.message));
+  await teaching.goto(home);
+  const coverage=await teaching.evaluate(()=>({guided:GUIDED_COURSES.map(c=>({id:c.id,independent:Boolean(c.steps[0].independent)})),topics:SIT_COURSE.map(l=>({id:l.id,commands:Boolean(l.commands?.length)})),real:FIELD_LABS.map(l=>l.key),missing:GUIDED_COURSES.flatMap(c=>c.steps.flatMap(step=>(step.commands||[]).map(raw=>({id:c.id,raw,parsed:analyseInput(raw)})))).filter(x=>x.parsed.issues.length||starterExplanation(x.parsed.segments[0])[1]==='先看本条命令要完成什么。').map(x=>({id:x.id,raw:x.raw,issues:x.parsed.issues}))}));
+  assert.deepEqual(coverage.missing,[],'Every advertised course command needs parsed parameters and a concrete explanation');
+  for(const course of coverage.guided){
+    await teaching.evaluate(id=>showPage('lesson/'+id),course.id);
+    if(course.independent){
+      assert.equal(await teaching.locator('#starter-guide').count(),0,course.id);
+      assert.ok(!await teaching.locator('#guided-terminal .command-coach').isVisible(),course.id);
+    }else{
+      assert.ok((await teaching.locator('#starter-guide h3').count())>0,course.id);
+      assert.doesNotMatch(await teaching.locator('#starter-guide').innerText(),/undefined|NaN/,course.id);
+      assert.equal(await teaching.evaluate(()=>getGuidedRun().events.length),0,course.id+' preview changed evidence');
+    }
+  }
+  for(const topic of coverage.topics){
+    await teaching.evaluate(id=>{showPage('academy');viewCourse(id,1);},topic.id);
+    assert.equal(await teaching.locator('.topic-prelude').count(),1,topic.id);
+    if(topic.commands){
+      assert.equal(await teaching.locator('#academy-command-guide').count(),1,topic.id);
+      assert.doesNotMatch(await teaching.locator('#academy-command-guide').innerText(),/undefined|NaN/,topic.id);
+    }
+  }
+  await teaching.evaluate(()=>showPage('real-labs'));
+  assert.equal(await teaching.locator('#backup-real-lab .real-prelude').count(),1);
+  assert.ok((await teaching.locator('#backup-real-lab .real-command-guide').count())>0);
+  for(const key of coverage.real){
+    await teaching.evaluate(id=>showPage('real-labs/'+id),key);
+    assert.equal(await teaching.locator('#field-real-lab .real-prelude').count(),1,key);
+    assert.ok((await teaching.locator('#field-real-lab .real-command-guide').count())>0,key);
+  }
+  await teaching.evaluate(()=>{showPage('academy');viewCourse('fiodesign',1)});
+  await teaching.locator('#academy-command-guide [data-academy-guide-index="1"]').first().click();
+  assert.match(await teaching.locator('.starter-command').filter({hasText:'--name=q16'}).innerText(),/--iodepth=16/);
+  await teaching.close();
+  assert.deepEqual(errors, []);
+  console.log(`PASS: learning workflows, all ${coverage.guided.length} guided entries, ${coverage.topics.length} topic lessons, ${coverage.real.length+1} real-lab guides, independent assessment isolation, saved progress and reports.`);
+} finally {
+  await browser.close();
+}

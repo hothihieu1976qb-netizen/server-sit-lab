@@ -51,25 +51,56 @@ COMMAND_SPECS.pwd={purpose:'显示当前虚拟工作目录。',fields:[['directo
 for(const name of ['clear','stop','pkill','save-logs','reboot','help','sim'])COMMAND_SPECS[name]={purpose:({clear:'清空当前终端显示，不删除历史或证据。',stop:'停止模拟负载。',pkill:'本模型仅支持停止stress进程组。','save-logs':'将已收集输出保存在虚拟日志文件。',reboot:'模拟重新启动，不重启真实电脑。',help:'查看模拟器支持的命令。',sim:'实验室辅助操作，区别于真实Linux命令。'})[name],fields:[['status','.+','本次模拟动作的状态；不对真实硬件生效。']],memory:'模拟动作在本地，结果与证据要核对。'};
 
 const PRACTICE_COMMAND_SPECS={
+    rpm:{purpose:'在 RPM 数据库查询已安装的软件包。',options:{'-q':['查询已安装的包；不访问仓库。']},positional:'查询包名 {v}。',fields:[['包名与版本','^jq-|not installed','已安装时显示包版本；not installed 指本机未安装。']],memory:'rpm -q 查本机。'},
+    dnf:{purpose:'查询软件来源或从获准仓库安装软件包。',positional:'info 查询包信息；install 安装包；本参数是 {v}。',fields:[['Repository / From repo','repo|^Available|^Installed','可用包来自哪个仓库；已安装的信息另有安装来源。']],memory:'DNF 查来源和安装，RPM 确认已装。'},
+    usermod:{purpose:'修改指定的模拟账号。',options:{'-a':['追加补充组；在此与 -G 一起使用。'],'-G':['指定补充组。没有 -a 会替换原组列表；实训只允许追加。','value',v=>'目标组：'+v+'。']},positional:'被修改的服务账号 {v}。',memory:'-aG 追加组，新进程验证。'},
+    getent:{purpose:'查询系统账号或组数据库；本工单支持查看 hostops 组。',positional:'group 是所查数据库，hostops 是目标组；本参数为 {v}。',fields:[['组名 / GID / 成员','^hostops:','记录按名称:密码占位:GID:成员列表排列。']],memory:'用 getent 查组记录，用 id 查用户所处的组。'},
+    install:{purpose:'以规定的属主、属组和权限把审核过的模板安装到目标路径。',options:{'-o':['目标属主。','value'],'-g':['目标属组。','value'],'-m':['目标八进制权限。0644 表示属主可读写、属组和其他用户只读。','value']},positional:'先写源模板，再写目标；本路径为 {v}。',memory:'安装配置后核对内容、属主和权限。'},
+    [HOST_REPORT_SCRIPT]:{purpose:'运行主机巡检汇总脚本。',fields:[['输出文件','^Wrote','脚本写出的虚拟产物；仍需读取并核对来源和时间。']],memory:'使用计划任务的账号手工试跑。'},
+    systemctl:{...COMMAND_SPECS.systemctl,options:{...COMMAND_SPECS.systemctl.options,'--now':['同时改变当前运行状态：enable 后立即启动，disable 后立即停止。']},positional:'is-active 查当前运行，is-enabled 查开机启用；start 立即启动，enable 设置开机启用；本参数为 {v}。'},
+    id:{...COMMAND_SPECS.id,positional:'账号名 {v}；省略时查询当前用户。'},
+    curl:{purpose:'向工单中的模拟端点发起 HTTP GET。',options:{'-i':['输出包含 HTTP 状态行和响应头。']},positional:'本次请求的目标 URL：{v}。',fields:[['HTTP 状态行','^HTTP/','200 表示这个请求成功；502 表示代理从上游取得响应失败。curl 默认不会仅因 HTTP 502 返回非零退出码。'],['Server','^Server:','生成响应的服务器标记。本工单的 502 由网关生成。'],['release','"release":','响应体中的应用版本，可用来验证新版本或回滚是否生效。']],memory:'本机查应用，外部查整条链路。'},
     ls:{purpose:'查看目录本身或虚拟文件的权限和归属。',options:{'-l':['长格式显示权限、属主与属组。'],'-d':['显示目录本身，不列目录内容。']}},
     touch:{purpose:'在测试卷创建一个空的虚拟探测文件。',positional:'创建或更新时间的虚拟路径 {v}。'},
     df:{...COMMAND_SPECS.df,options:{...COMMAND_SPECS.df.options,'-i':['显示 inode 数量、已用与可用，单位是个。']}}
 };
 
-function shellWords(raw){return (raw.match(/(?:[^\s"'|>]+|"[^"]*"|'[^']*')+|[|>]/g)||[]).map(t=>t.replace(/["']/g,''));}
+function shellTokens(raw){return raw.match(/(?:[^\s"'|>]+|"[^"]*"|'[^']*')+|>>|[|>]/g)||[];}
+function shellWords(raw){return shellTokens(raw).map(t=>t.replace(/["']/g,''));}
 function analyseInput(raw,{practice=true}={}){
-  const words=shellWords(raw),segments=[],operators=[],issues=[];let list=[];
-  for(const word of words){if(word==='|'||word==='>'){if(list.length)segments.push(parseSegment(list,practice));list=[];operators.push(word);}else list.push(word);}
-  if(list.length)segments.push(parseSegment(list,practice));
-  if(operators.includes('>')){const target=segments.pop();if(!target||target.words.length!==1||!/^\/tmp\/[\w.-]+$/.test(target.words[0]))issues.push('重定向仅支持虚拟 /tmp/文件名。');else operators.push(target.words[0]);}
+  const words=shellTokens(raw),segments=[],operators=[],issues=[];let list=[];
+  const redirect=words.findIndex(t=>t==='>'||t==='>>');
+  let saved=[];
+  if(redirect>=0){
+    const target=words[redirect+1]?.replace(/["']/g,'');
+    if(redirect!==words.length-2||!/^\/tmp\/[\w.-]+$/.test(target||''))issues.push('重定向仅支持命令末尾的虚拟 /tmp/文件名。');
+    saved=[words[redirect],target||''];words.splice(redirect);
+  }
+  for(const word of words){
+    if(word==='|'){
+      if(!list.length)issues.push('管道两侧需要命令。');
+      segments.push(parseSegment(list,practice,segments.length>0));list=[];operators.push(word);
+    }else list.push(word.replace(/["']/g,''));
+  }
+  if(list.length)segments.push(parseSegment(list,practice,segments.length>0));
+  else if(operators.length)issues.push('管道末尾需要命令。');
+  operators.push(...saved);
   segments.forEach(s=>issues.push(...s.issues));
-  if(operators.includes('|')&&(segments.length!==2||segments[1].command!=='grep'))issues.push('本模拟只实现“命令 | grep [-i] 文本”这一管道。');
+  if(segments.slice(1).some(s=>!['grep','head','tail','wc'].includes(s.command)))issues.push('管道后支持 grep、head、tail、wc。');
   return {raw,segments,operators,issues};
 }
-function parseSegment(input,practice=false){
-  const words=[...input],parts=[],issues=[],opts={},positionals=[];let fromB=false;
-  if(words[0]==='sudo'){parts.push({token:words.shift(),meaning:'以提权语义执行；本模型不改变真实权限。'});}
-  if(words[0]==='sim'&&words[1]==='b'){words.splice(0,2);fromB=true;parts.push({token:'sim b',meaning:'实验室辅助前缀：在B端网络子系统运行后续命令，不是真实Linux选项。'});}
+function parseSegment(input,practice=false,pipeInput=false){
+  const words=[...input],parts=[],issues=[],opts={},positionals=[];let fromB=false,effectiveUser='student';
+  if(words[0]==='sudo'){
+    const token=words.shift();effectiveUser='root';
+    parts.push({token,meaning:'在实训中授权执行指定管理操作，不改变真实权限。'});
+    if(words[0]==='-u'){
+      words.shift();effectiveUser=words.shift();
+      parts.push({token:'-u '+(effectiveUser||''),meaning:'为这一次命令选择执行账号；当前终端会话的账号不因此改变。本次使用 '+effectiveUser+'。'});
+      if(!['reportbot','guest'].includes(effectiveUser)||![HOST_REPORT_SCRIPT,'cat','id','whoami','ls','touch','/usr/bin/jq'].includes(words[0]))issues.push('sudo -u 在本模型支持 reportbot/guest 的身份、文件查看与创建、绝对路径 jq 版本检查，或 reportbot 巡检脚本。');
+    }
+  }
+  if(words[0]==='sim'&&words[1]==='b'){words.splice(0,2);fromB=true;parts.push({token:'sim b',meaning:'实验室辅助前缀：在模拟主机 B 上执行后续命令。Web 工单的 B 是代理网关。'});}
   const command=words[0]||'';
   const spec=practice&&command==='mount'&&words.length>1
     ?{...COMMAND_SPECS.mount,purpose:'按模拟 fstab 挂载指定目标。',positional:'要挂载的目标 {v}。'}
@@ -88,25 +119,34 @@ function parseSegment(input,practice=false){
     if(word==='--help'){parts.push({token:word,meaning:'显示本模拟器实现的选项帮助，不运行负载。'});opts['--help']=true;continue;}
     if(word.startsWith('-')){
       const equal=word.indexOf('='),flag=equal>=0?word.slice(0,equal):word,desc=optionSpecs[flag];
+      const shortFlags=/^-[a-zA-Z]+$/.test(word)?[...word.slice(1)].map(letter=>'-'+letter):[];
       if(desc){let value=equal>=0?word.slice(equal+1):null;
         if(value===null&&desc[1]==='value'&&words[i+1]&&!words[i+1].startsWith('-'))value=words[++i];
         if(value===null&&desc[1]==='optional'&&/^(-1|0)$/.test(words[i+1]||''))value=words[++i];
         if(equal>=0&&!desc[1])issues.push(flag+' 不接收参数值。');addOption(flag,value,desc);
-      }else if(/^-[a-zA-Z]+$/.test(word)&&word.slice(1).split('').every(c=>optionSpecs['-'+c]&&!optionSpecs['-'+c][1])){
-        parts.push({token:word,meaning:'组合短选项：'+word.slice(1).split('').map(c=>'-'+c).join('、')+'。'});word.slice(1).split('').forEach(c=>addOption('-'+c,null,optionSpecs['-'+c]));
+      }else if(shortFlags.length&&shortFlags.every((part,index)=>optionSpecs[part]&&(!optionSpecs[part][1]||index===shortFlags.length-1&&optionSpecs[part][1]==='value'))){
+        parts.push({token:word,meaning:'组合短选项：'+shortFlags.join('、')+'。'});
+        for(const part of shortFlags){
+          const option=optionSpecs[part],next=words[i+1];
+          const value=option[1]==='value'&&next&&!next.startsWith('-')?words[++i]:null;
+          addOption(part,value,option);
+        }
       }else{parts.push({token:word,meaning:'当前模拟器尚未实现此选项，未执行；不会猜测其含义。',unsupported:true});issues.push('尚未实现选项 '+word);}
     }else{positionals.push(word);parts.push({token:word,meaning:(spec?.positional||'位置参数 {v}。').replace('{v}',word)});}
   }
-  const supportedPositionals={ip:['link','addr','route','neigh'],systemctl:['status','list-units','sit-agent','sit-agent.service','NetworkManager','NetworkManager.service'],ps:['aux'],modinfo:['simnic','simhba'],pkill:['stress','stress-ng']};
+  if(command==='wc'&&words.includes('-1'))issues.push('wc -l 使用小写字母 l，你输入的是数字 1。');
+  const supportedPositionals={ip:['link','addr','route','neigh'],systemctl:['status','list-units','sit-agent','sit-agent.service','NetworkManager','NetworkManager.service','status-app','status-app.service'],ps:['aux'],modinfo:['simnic','simhba'],pkill:['stress','stress-ng']};
   const hasLabAction=command==='ip'&&practice&&['addr','link'].includes(positionals[0])&&positionals.length>1;
   const routeLookup=command==='ip'&&practice&&positionals[0]==='route'&&positionals[1]==='get'&&positionals.length===3;
-  const restart=command==='systemctl'&&practice&&positionals[0]==='restart'&&positionals.length===2&&['sit-agent','sit-agent.service'].includes(positionals[1]);
+  const restart=command==='systemctl'&&practice&&positionals[0]==='restart'&&positionals.length===2&&['sit-agent','sit-agent.service','status-app','status-app.service'].includes(positionals[1]);
+  const cronAction=command==='systemctl'&&positionals.length===2&&['crond','crond.service'].includes(positionals[1])&&['status','is-active','is-enabled','start','stop','enable','disable'].includes(positionals[0]);
+  if(command==='systemctl'&&opts['--now']&&(!cronAction||!['enable','disable'].includes(positionals[0])))issues.push('--now 只支持本工单对 crond 的 enable 或 disable。');
   if(routeLookup){
     parts.at(-2).meaning='按具体目的地址查询实际选择的路由。';
     parts.at(-1).meaning='要解析下一跳和出口的对端 IPv4 地址。';
   }
   if(restart)parts.at(-2).meaning='停止并重新启动指定虚拟服务，读取已保存配置。';
-  if(supportedPositionals[command]&&!hasLabAction&&!routeLookup&&!restart&&positionals.some(v=>!supportedPositionals[command].includes(v)))issues.push(command+' 的该位置参数尚未实现。');
+  if(supportedPositionals[command]&&!hasLabAction&&!routeLookup&&!restart&&!cronAction&&positionals.some(v=>!supportedPositionals[command].includes(v)))issues.push(command+' 的该位置参数尚未实现。');
   if(hasLabAction){
     const actionParts=parts.slice(-positionals.length+1);
     const meanings=positionals[0]==='addr'
@@ -114,22 +154,33 @@ function parseSegment(input,practice=false){
       : ['修改当前接口的状态。','指定要操作的接口。','目标接口名称。',positionals.at(-1)==='up'?'启用接口。':'停用接口。'];
     if(actionParts.length===meanings.length)actionParts.forEach((part,i)=>{part.meaning=meanings[i];});
   }
-  if(['uname','lscpu','free','top','uptime','hostnamectl','whoami','id','date','history','nproc','lsmod','df','mount','ss','route'].includes(command)&&positionals.length&&!(command==='mount'&&practice&&positionals.length===1&&positionals[0]==='/mnt/sit'))issues.push(command+' 不支持本次位置参数。');
+  if(['uname','lscpu','free','top','uptime','hostnamectl','whoami','id','date','history','nproc','lsmod','df','mount','ss','route'].includes(command)&&positionals.length&&!(command==='mount'&&practice&&positionals.length===1&&positionals[0]==='/mnt/sit')&&!(command==='id'&&positionals.length===1&&positionals[0]==='reportbot'))issues.push(command+' 不支持本次位置参数。');
   if(['blkid','lsblk','lspci','fdisk','dmidecode'].includes(command)&&positionals.length)issues.push(command+' 当前不实现设备筛选位置参数。');
-  if(['cat','smartctl','modinfo','ping','ethtool','traceroute','tail','less','ls','touch'].includes(command)&&!positionals.length&&!opts['--help'])issues.push(command+' 缺少目标文件、设备或地址。');
-  if(opts['-o']&&opts['-o']!=='NAME,SIZE,MODEL')issues.push('lsblk -o 当前只实现NAME,SIZE,MODEL。');
+  if(['cat','smartctl','modinfo','ping','ethtool','traceroute','tail','less','touch'].includes(command)&&!positionals.length&&!opts['--help']&&!(pipeInput&&command==='tail'))issues.push(command+' 缺少目标文件、设备或地址。');
+  if(command==='lsblk'&&opts['-o']&&opts['-o']!=='NAME,SIZE,MODEL')issues.push('lsblk -o 当前只实现NAME,SIZE,MODEL。');
   if(command==='free'&&opts['-h']&&opts['-m'])issues.push('free 当前请选择-h或-m一种显示单位。');
   if(command==='dmidecode'&&!opts['--help']&&!['system','bios'].includes(opts['-t']))issues.push('dmidecode -t 仅支持system/bios。');
-  if(command==='journalctl'&&opts['-u']&&!['sit-agent','sit-agent.service'].includes(opts['-u']))issues.push('当前只模拟sit-agent服务日志。');
-  if(fromB&&!['iperf3','ip'].includes(command))issues.push('B端只模拟ip和iperf3网络子系统。');
+  if(command==='journalctl'&&opts['-u']&&!['sit-agent','sit-agent.service','status-app','status-app.service','nginx','nginx.service','crond','crond.service'].includes(opts['-u']))issues.push('当前未模拟该服务日志。');
+  if(fromB&&!['iperf3','ip','journalctl','cat','ss'].includes(command))issues.push('本命令在模拟主机 B 上尚未实现。');
   if(['vmstat','iostat'].includes(command)&&positionals.some(v=>!/^\d+$/.test(v)||Number(v)<1))issues.push('采样间隔必须为正整数；本模型输出单次快照。');
   if(['cat','du','findmnt','smartctl','modinfo','ping','traceroute','tail','less'].includes(command)&&positionals.length>1)issues.push(command+' 当前仅支持单个目标。');
   if(command==='fio'&&positionals.some(v=>!['/mnt/sit/low.fio','/mnt/sit/fixed.fio'].includes(v)))issues.push('当前只实现low.fio与fixed.fio这两个虚拟作业文件。');
-  if(command==='journalctl'&&positionals.length)issues.push('journalctl 当前仅实现-b [0/-1]、-k及-u sit-agent。');
+  if(command==='journalctl'&&positionals.length)issues.push('journalctl 当前仅实现 -b [0/-1]、-k 及 -u 服务名。');
+  if(command==='curl'&&positionals.length!==1&&!opts['--help'])issues.push('curl 需要一个模拟 URL。');
   if(practice&&command==='sim'&&PRACTICE_ACTIONS[positionals[0]]){
     const [purpose,value]=PRACTICE_ACTIONS[positionals[0]];
     if(parts[1])parts[1].meaning=purpose;
     if(parts[2])parts[2].meaning=value;
+  }
+  if(command==='chmod'&&positionals.length===2){
+    const mode=positionals[0];
+    parts.at(-2).meaning=/^0?[0-7]{3}$/.test(mode)?'八进制权限 '+mode+'，末三位分别是属主、属组、其他，每位按 r=4、w=2、x=1 相加。':/^g[+-][rwx]$/.test(mode)?'g 选择属组；'+(mode[1]==='+'?'追加':'移除')+' '+({r:'读取',w:'写入',x:'执行或目录搜索'})[mode[2]]+' 权限。':'当前模拟器尚未实现这种模式。';
+    parts.at(-1).meaning='要修改权限的虚拟对象：'+positionals[1]+'。';
+  }
+  if(command==='export'&&positionals.length===1&&positionals[0].startsWith('PATH='))parts.at(-1).meaning='设置 PATH 为 '+positionals[0].slice(5)+'。冒号分隔搜索目录，当前赋值不写入登录配置。';
+  if(command==='dnf'&&positionals.length===2){
+    parts.at(-2).meaning=({info:'查询已安装包或仓库候选信息。',install:'从课内批准的仓库安装指定包。'})[positionals[0]]||'尚未实现的 DNF 操作。';
+    parts.at(-1).meaning='本次包名为 '+positionals[1]+'。';
   }
   if(command==='stress-ng'&&opts['--io'])issues.push('stress-ng的--io未实现；本模型只在stress中提供该选项。');
   if(command==='sim'&&positionals[0]==='kernel'){
@@ -140,8 +191,13 @@ function parseSegment(input,practice=false){
     const descriptions=['管理模拟驱动包。','install：安装包，不自动加载。',positionals[2]+'：目标模块名。',positionals[3]+'：包所属的教学内核目录。'];
     parts.slice(-positionals.length).forEach((p,i)=>p.meaning=descriptions[i]||'未实现的位置参数。');
   }
+  if(command==='sim'&&positionals[0]==='release'){
+    const descriptions=['进入本地发布模型。','status 查询版本；deploy 发布指定版本；rollback 恢复上一部署版本。','要部署的模拟制品版本：'+positionals[2]+'。'];
+    parts.slice(-positionals.length).forEach((part,index)=>part.meaning=descriptions[index]||'未实现的位置参数。');
+  }
+  if(command==='sim'&&positionals[0]==='next-cron')parts.at(-1).meaning='把本工单的 UTC 时钟跳到下一个每天 02:15；如果计划已安装、crond 在运行，则按时触发。';
   const sub=['ip','systemctl'].includes(command)?positionals[0]||'default':'';
-  return {command,words,input,fromB,spec,parts,opts,positionals,issues,key:command+(sub?' '+sub:'')};
+  return {command,words,input,fromB,effectiveUser,spec,parts,opts,positionals,issues,key:command+(sub?' '+sub:'')};
 }
 function outputFields(parsed,output){
   const segment=parsed.segments[0],spec=segment?.spec;if(!spec)return [];
@@ -158,7 +214,7 @@ function terminalOutput(raw,output,parsed){
   const cmd=parsed.segments[0]?.command||'simulator';
   if(parsed.issues.length)return cmd+': unsupported simulated syntax: '+parsed.issues.map(x=>x.match(/--?[A-Za-z_-]+/)?.[0]||cmd).join(', ');
   if(cmd==='clear')return '';
-  if(parsed.operators.includes('>'))return 'Output saved to virtual '+parsed.operators.at(-1);
+  if(parsed.operators.some(op=>op==='>'||op==='>>'))return 'Output saved to virtual '+parsed.operators.at(-1);
   if(cmd==='help'||parsed.segments[0]?.opts['--help'])return 'Supported simulator commands/options:\n'+(cmd==='help'?Object.keys(COMMAND_SPECS).join('  '):cmd+' '+Object.keys(COMMAND_SPECS[cmd].options||{}).join(' '));
   if(cmd==='stop'||cmd==='pkill')return output.includes('无运行')?'stress: no active workers':'stress: workers stopped (simulated)';
   if(cmd==='save-logs')return S.saved?'Saved virtual evidence: /tmp/sit-evidence.log':'save-logs: no captured output';
@@ -226,7 +282,7 @@ function renderCommandLesson(){
     ${evidence?'<h3>本次输出怎么读</h3>'+evidence:lesson.output&&lesson.failed?'<div class="output-field"><b>原始返回</b><pre>'+esc(lesson.output)+'</pre></div>':''}
     ${moreFields.length?'<details class="coach-detail"><summary>查看其余字段</summary>'+renderFieldRows(moreFields)+'</details>':''}
     <details class="coach-detail" ${issues?'open':''}><summary>命令结构、参数与取值</summary><p>${esc(lesson.purpose)}</p>${issues}
-    <table><thead><tr><th>实际输入</th><th>作用与取值</th></tr></thead><tbody>${args.map(r=>`<tr class="${r.unsupported?'different':''}"><td><code>${esc(r.token)}</code></td><td>${esc(r.meaning)}</td></tr>`).join('')}${lesson.parsed.operators.map(op=>`<tr><td>${esc(op)}</td><td>${op==='|'?'传给后续 grep 筛选。':op==='>'?'输出到模拟文件。':'模拟目标文件。'}</td></tr>`).join('')}</tbody></table></details>
+    <table><thead><tr><th>实际输入</th><th>作用与取值</th></tr></thead><tbody>${args.map(r=>`<tr class="${r.unsupported?'different':''}"><td><code>${esc(r.token)}</code></td><td>${esc(r.meaning)}</td></tr>`).join('')}${lesson.parsed.operators.map(op=>`<tr><td>${esc(op)}</td><td>${op==='|'?'把标准输出交给后续命令。':op==='>'?'覆盖写入虚拟文件。':op==='>>'?'追加到虚拟文件末尾。':'虚拟目标路径。'}</td></tr>`).join('')}</tbody></table></details>
     <details class="coach-detail coach-practice-more"><summary>记忆与技术复盘</summary><p>${esc(lesson.mnemonic)}</p><div id="memory-check" class="memory-check"></div><button class="spaced" data-action="operation-followup">练习相关追问 →</button></details>`;
   renderMemoryCheck();
 }
@@ -346,7 +402,13 @@ function renderWorkMode(){
   $('lesson-toggle').disabled=exam;$('session-kind').textContent=exam?'独立考核':lesson?'课程实训':'自由实训';
   $('work-task').innerHTML=exam?'<span class="tag">独立考核</span><b>按任务书独立执行，交卷前隐藏教学解析</b><button data-go="assessment">返回考核任务书</button>':lesson?academyPracticeCard():'<span class="tag">自由实训</span><b>当前未绑定课程，操作记录只进入本工程</b><p>可以自由使用工具；要计入课程产物，请先从学习路径开始该课任务。</p><button data-go="academy">选择学习任务</button>';
   const practice=currentPractice();
-  if(practice)$('session-kind').textContent=S.page==='lesson'?'本课模拟终端':'案例模拟终端';
+  if(practice){
+    const inCourse=S.page==='lesson';
+    $('session-kind').textContent=inCourse?'本课模拟终端':'案例模拟终端';
+    $('work-task').innerHTML=inCourse
+      ?'<span class="tag">本课操作</span><b>命令与输出会记入当前课程</b><button data-action="jump-guided-evidence">查看本步证据 ↓</button>'
+      :'<span class="tag">案例操作</span><b>命令与输出会记入当前案例</b>';
+  }
   $('command').placeholder=practice?'输入命令，按 Enter 执行':'输入命令，如 lscpu，然后按 Enter';
   renderCoachStats();
 }

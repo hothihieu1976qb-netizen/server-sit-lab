@@ -1,0 +1,76 @@
+name: sit-ops003
+
+x-postgres: &postgres
+  image: postgres:17.12-bookworm
+  environment:
+    POSTGRES_DB: orders
+    POSTGRES_USER: lab_owner
+    POSTGRES_PASSWORD: lab-db-only
+  healthcheck:
+    test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab_owner, -d, orders]
+    interval: 2s
+    timeout: 3s
+    retries: 30
+
+x-api: &api
+  image: postgrest/postgrest:v14.18
+
+services:
+  source-db:
+    <<: *postgres
+    volumes:
+      - source-data:/var/lib/postgresql/data
+      - ./sql/roles.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+      - ./sql/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql:ro
+      - ./sql:/fixtures:ro
+
+  source-api:
+    <<: *api
+    depends_on:
+      source-db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://lab_api:lab-api-only@source-db:5432/orders
+      PGRST_DB_SCHEMAS: api
+      PGRST_DB_ANON_ROLE: lab_reader
+    ports:
+      - "127.0.0.1:${LAB_SOURCE_PORT:-18743}:3000"
+
+  recovery-db:
+    <<: *postgres
+    profiles: [recovery]
+    volumes:
+      - recovery-data:/var/lib/postgresql/data
+      - ./sql/roles.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+
+  recovery-api:
+    <<: *api
+    profiles: [recovery]
+    depends_on:
+      recovery-db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://lab_api:lab-api-only@recovery-db:5432/orders
+      PGRST_DB_SCHEMAS: api
+      PGRST_DB_ANON_ROLE: lab_reader
+    ports:
+      - "127.0.0.1:${LAB_RECOVERY_PORT:-18744}:3000"
+
+  tools:
+    image: postgres:17.12-bookworm
+    profiles: [tools]
+    user: "${LAB_UID:-1000}:${LAB_GID:-1000}"
+    environment:
+      PGUSER: lab_owner
+      PGDATABASE: orders
+      PGPASSWORD: lab-db-only
+      PGCONNECT_TIMEOUT: "5"
+    working_dir: /artifacts
+    entrypoint: [bash, /lab/lab.sh]
+    volumes:
+      - ./lab.sh:/lab/lab.sh:ro
+      - ./artifacts:/artifacts
+
+volumes:
+  source-data:
+  recovery-data:

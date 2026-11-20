@@ -6,6 +6,7 @@ function studioIcon(name, extra = '') {
 
 function studioCourseStyle(course) {
   const text = course.group + course.id;
+  if (course.track==='linux') return {kind:'workflow',icon:'workflow',name:'LINUX OPERATIONS',hue:'mint'};
   if (/网络|network|nic/.test(text)) return { kind:'network', icon:'network', name:'NETWORK SYSTEMS', hue:'blue' };
   if (/存储|磁盘|fio|hba/.test(text)) return { kind:'storage', icon:'hard-drive', name:'STORAGE & I/O', hue:'violet' };
   if (/稳定性|资源|cpu|memory/.test(text)) return { kind:'compute', icon:'activity', name:'COMPUTE & STABILITY', hue:'amber' };
@@ -66,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateMotion();
   function paintResults(){
     const q=input.value.trim().toLowerCase();
-    const courses=GUIDED_COURSES.map(c=>({label:c.title,note:c.group+' · '+(c.level==='基础'?'初级':'中级'),id:c.id,course:true,icon:studioCourseStyle(c).icon}));
+    const courses=GUIDED_COURSES.map(c=>({label:c.title,note:(c.track==='linux'?'Linux 工作实训 · ':'服务器 SIT · ')+c.group+' · '+(c.level==='基础'?'初级':'中级'),id:c.id,course:true,icon:studioCourseStyle(c).icon}));
     const tools=navItems.filter(n=>!['home','lesson'].includes(n[0])).map(n=>({label:n[2],note:'工作空间',id:n[0],icon:n[0]==='terminal'?'terminal':'arrow-up-right'}));
     results=[...courses,...tools].filter(x=>(x.label+' '+x.note+' '+x.id).toLowerCase().includes(q)).slice(0,12);
     selected=0;
@@ -114,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const on=document.getElementById('server-scene').classList.toggle('exploded');b.setAttribute('aria-pressed',String(on));b.innerHTML=studioIcon('layers')+'<span>'+(on?'合拢机架':'拆解视图')+'</span>';break;
       }
       case 'catalog':document.getElementById('course-catalog').scrollIntoView({behavior:motionOff?'instant':'smooth',block:'start'});break;
-      case 'clear-filter':document.getElementById('catalog-search').value='';document.getElementById('catalog-level').value='';document.getElementById('catalog-topic').value='';S.ui.catalogLevel='';S.ui.catalogTopic='';filterGuidedCatalog();break;
+      case 'clear-filter':document.getElementById('catalog-search').value='';document.getElementById('catalog-level').value='';document.getElementById('catalog-topic').value='';S.ui.catalogLevel='';S.ui.catalogTopic='';S.ui.catalogTrack='';filterGuidedCatalog();break;
     }
   });
   document.addEventListener('input',e=>{if(e.target.id==='catalog-search')filterGuidedCatalog();});

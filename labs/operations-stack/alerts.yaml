@@ -1,0 +1,17 @@
+groups:
+  - name: orders-service
+    rules:
+      - alert: LedgerDependencyUnavailable
+        expr: sit_gateway_dependency_ready == 0
+        for: 6s
+        labels:
+          severity: page
+        annotations:
+          summary: Order gateway is alive but its ledger is unavailable
+      - alert: GatewayScrapeDown
+        expr: up{job="gateway"} == 0
+        for: 6s
+        labels:
+          severity: page
+        annotations:
+          summary: Prometheus cannot scrape the order gateway

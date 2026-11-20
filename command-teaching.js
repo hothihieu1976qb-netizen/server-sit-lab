@@ -41,6 +41,9 @@ const COMMAND_TEACHING = {
 };
 
 const TEACHING_FAILURES = {
+  'command-search':['当前环境没有找到请求的程序。','分别核对 RPM 安装记录、程序文件路径与 PATH；用绝对路径复测后再确定原因。'],
+  'no-match':['本次筛选没有命中，grep 返回 1。','先核对源文件、大小写与筛选范围。这类结果不能证明整台系统没有问题。'],
+  'unsupported-pattern':['本模型没有执行这次正则筛选。','本课用固定字符串练习，包含元字符的文本请显式加 -F。'],
   'module-not-found':['当前运行内核的目录里没有该模拟模块包。','先用 uname -r 确认实际版本，再用 modinfo -k 版本 模块核对包；安装匹配包后加载并复查设备。'],
   'vermagic':['模块构建标识与本次运行内核不匹配。','保存版本与失败日志，使用匹配构建的模块或回退到已验证组合；不能通过改版本字符串证明兼容。'],
   'firmware':['模块已加载，但设备初始化所需固件失败。','对照 lsmod、lspci 和本次内核日志，区分模块加载与 probe，修复后验证接口。'],
@@ -58,6 +61,9 @@ const TEACHING_FAILURES = {
   'no-inodes':['新文件需要的 inode 分配失败，返回 ENOSPC。','查看目标挂载的 df -i，并与 df -hT 对照。'],
   'read-only':['写操作被只读文件系统拒绝。','通过 findmnt 与挂载消息核实 rw/ro，保留导致保护模式的证据。'],
   permission:['本次操作被权限检查拒绝。','核对执行身份、属组和目录权限，并确认是否还存在其他访问限制。'],
+  'missing-package':['本机缺少所需的软件包。','先查批准的仓库和变更范围，再安装并用 RPM 确认。'],
+  disabled:['此服务未设置开机启用。','用 is-active 单独检查当前是否运行；两项需分别核对。'],
+  inactive:['本次查询时服务未运行。','查 systemctl status 和本次启动日志，区分未启动与启动失败。'],
   'service-failed':['目标服务当前处于失败状态。','读取当前启动中该单元的日志，核对配置和实际监听。'],
   'no-space':['向测试文件分配空间时返回 ENOSPC。','核对 df 的挂载目标、Avail 和 Use%。真实现场还要查 inode 与配额。'],
   'io-error':['测试 I/O 已发出，返回 EIO。','保留同次 dmesg 中设备与超时的前后顺序。错误本身不足以指出哪个部件损坏。'],
@@ -83,6 +89,51 @@ function teachingRows(segment,output,event){
   const add=(field,actual,meaning)=>{if(actual)rows.push({field,actual,meaning});};
   if(!segment)return rows;
   const {command,key,positionals}=segment;
+  if(event?.kind==='package-environment'||event?.kind==='package-environment-change')add('当前导出 PATH',event.path,'目录以冒号分隔。普通终端的 export 只作用于当前会话及其子进程，本课不自动写登录配置。');
+  if(event?.kind==='package-lookup')add('本次搜索结果',event.programPath||'未找到 · exit 1','没有搜索到与没有安装需分别核对。结合包内文件和当前 PATH 判断。');
+  if(event?.kind==='package-files'&&event.paths)add('包内文件',event.paths.join('\n'),'rpm -ql 把本机包记录和文件路径对应；实际可执行性还需启动程序验证。');
+  if(event?.kind==='package-version'&&!event.failed)add('实际执行的程序',event.programPath+' · jq-'+event.version,event.absolute?'指定绝对路径，绕过普通命令的 PATH 搜索。':'当前普通终端找到了程序，版本由该程序返回。');
+  if(event?.kind==='ops-collect'&&event.runId)add('本轮运行',String(event.runId)+' · exit '+event.exitCode,'把这次执行与日志和产物的 runId 对应。旧文件仍可能存在，需核对本次结果。');
+  if(event?.kind==='ops-artifact'&&event.artifact?.runId)add('报告的运行来源','runId='+event.artifact.runId+' · boot='+event.artifact.boot+' · source='+event.artifact.source,'对照本轮运行编号、启动轮次与执行账号。manual 表示手工触发，不能代替调度验收。');
+  if(event?.kind==='account-identity'){
+    add('本次命令的执行者',event.account,'sudo -u 只为这一条命令指定执行账号，当前终端会话不会因此切换。');
+    add('身份来源',event.identitySource==='database'?'账号资料查询':'本次执行进程','id 用户名查询账号数据库；不带用户名的 id 反映当前进程继承的身份。');
+    if(event.members)add('本次所属组',event.members.join('、'),'主组和补充组均参与属组权限判断。旧会话保留它创建时的组，新进程要重新验证。');
+  }
+  if(event?.kind==='account-mode')add('本次权限变更',event.target+' · '+event.previous+' → '+event.mode,'这是该对象的权限位。修改后需要用目标账号验证实际读写或经过能力。');
+  if(event?.kind==='account-list'&&event.mode)add('对象权限',event.mode+' · '+(event.owner||'root')+':'+(event.group||'hostops'),'三类权限从左到右对应属主、属组和其他。目录与普通文件的同一权限位有不同用途。');
+  if(event?.account&&event.failed&&event.reason==='permission')add('本次执行身份与失败层次',event.account+' · '+event.layer,'directory-search 是经过目录，directory-write 是新建条目，file-read 是读取文件；结合目录和文件的权限定位。');
+  if(event?.kind==='account-create'&&!event.failed)add('创建后的复核',event.target,'使用 ls -l 核对属主、主组和权限。本课固定 umask 0027，目录没有 setgid 位。');
+  if(event?.workingDirectory)add('本次命令的起点',event.workingDirectory,'相对路径从这个目录解析。cd 改变本课工作目录，pwd 核对实际位置。');
+  if(event?.kind==='file-find')add('查找结果',event.paths.join('\n')||'无匹配','-name 看名字，-type 看对象类型。没有匹配仍是一次正常查找。');
+  if(event?.kind==='text-filter'&&!event.pipeline){
+    if(event.filter==='grep')add('匹配结果',event.matches+' 行 · exit '+event.exitCode,'-n 行号属于本次输入。固定字符串匹配保留完整原始行；没有匹配返回 1。');
+    if(event.filter==='wc'){
+      if(segment.opts['-l'])add('这次数出的行数',event.newlineCount+' 行','-l 是小写字母 L。本课文本每行末尾都有换行，数字表示这些文本行。一个请求可能记录多行，判断请求数量还要看 request 编号。');
+      if(segment.opts['-c'])add('这次统计的字节数',event.bytes+' 字节','-c 按字节计数。它描述文本大小，中文字符可能占多个字节。');
+    }
+    if(event.filter==='head'||event.filter==='tail')add('本次截取',event.filter+' -n '+event.limit+' · 实际 '+event.selectedLines+' 行','这是文件的一部分，继续查看另一端和完整上下文。');
+  }
+  if(event?.pipeline){
+    add('输入来源',event.sourcePath||segment.command,'管道读取本轮前一命令的标准输出。错误消息单独显示。');
+    for(const filter of event.filters||[])add('流经 '+filter.command,filter.pattern!==undefined?'匹配文本 '+filter.pattern:filter.newlineCount!==undefined?'统计 '+filter.newlineCount+' 个换行符':'截取 '+filter.selectedLines+' 行','后续命令处理上游输出。行号从它收到的输入重新计算。');
+    if(event.destination)add('写入虚拟文件',event.destination+(event.redirect==='>>'?' · 追加':' · 覆盖'),'终端无正常输出时，读回目标确认内容。> 会先截断目标，读取源出错也可能留下空目标。');
+  }
+  if(event?.kind==='web-upstream')add('proxy_pass',line(/proxy_pass/),'网关将请求发送到这个上游地址和端口。与应用主机的 ss 监听对照。');
+  if(event?.kind==='web-proxy-log')add('connect() / upstream',lines.findLast(value=>value.includes('while connecting to upstream')),'这行记录网关连接哪个上游，以及连接失败的原因。故障发生在网关到应用这一段。');
+  if(event?.kind==='web-app-config')add('APP_PORT',line(/^APP_PORT=/),'应用配置中的监听端口；用 ss 验证进程当前实际监听的端口。');
+  if(event?.kind==='web-app-status'){
+    add('Active',line(/Active:/),'服务当前运行状态。failed 是结果，需结合应用消息判断原因。');
+    add('Main PID / status',line(/Main PID:/),event.failed?'这条记录描述已经退出的应用进程。本课 78/CONFIG 是应用报告的配置错误；查询状态命令自身返回 3。':'当前主进程正在运行，继续查看端口并请求业务入口。');
+  }
+  if(event?.kind==='web-app-log'){
+    add('本次查询范围',event.previousBoot?'上一次启动 · status-app':'当前启动 · status-app','-u 选服务，-b 选当前启动，-b -1 选上次启动。同一轮中也可能同时保留修复前后的消息。');
+    add('应用消息',lines.findLast(value=>/invalid APP_PORT|listening on|Permission denied/.test(value)),'对照配置、启动先后顺序和业务复测。历史消息保留，不会因为修复而自动删除。');
+  }
+  if(event?.kind==='ops-schedule-read')add('计划行：分 时 日 月 星期 用户 命令',line(/^15 2 /),'每天按主机时区于 02:15 启动。cron.d 的用户字段指定 reportbot，命令使用绝对路径。');
+  if(event?.kind==='ops-cron-log')add('CROND / CMD',lines.findLast(value=>value.includes(' CMD ')),'调度器已经派发命令。脚本是否完成还要查退出结果和新生成的文件。');
+  if(event?.kind==='ops-job-log')add('source / exit',lines.findLast(value=>value.includes('exit=')),'source 区分手工和定时。exit=0 表示脚本成功，仍应对照新报告的时间和来源。');
+  if(event?.kind==='ops-artifact')add('generatedAt / boot / source',lines.filter(value=>/"(generatedAt|boot|source)"/.test(value)).join('\n'),'用时间、启动轮次和生成方式排除旧报告或手工试跑。');
   if(command==='lscpu'){
     const count=label=>Number(lines.find(l=>l.startsWith(label+':'))?.split(':')[1]);
     const sockets=count('Socket(s)'),cores=count('Core(s) per socket'),threads=count('Thread(s) per core'),total=count('CPU(s)');

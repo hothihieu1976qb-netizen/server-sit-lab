@@ -196,7 +196,7 @@ function renderKnowledge(){
     <div class="knowledge-body"><div class="two-col">
     <div><h3>这条命令回答什么？</h3><p>${esc(topic?.[0]||purpose+'。'+usage)}</p><h3>怎样解释结果？</h3><p>${esc(topic?.[1]||focus)}</p>
     <h3>下一项验证</h3><p>${esc(topic?.[2]||followup)}</p></div>
-    <div><h3>教学输出样例</h3><pre class="light-log">${esc(output)}</pre><button data-study-command="${esc(example)}">填入实训终端</button></div>
+    <div><h3>教学输出样例</h3><pre class="light-log">${esc(output)}</pre>${row[7]?'<button data-guided-course="'+esc(row[7])+'">进入配套实训</button>':'<button data-study-command="'+esc(example)+'">填入实训终端</button>'}</div>
     </div></div></details>`;
   }).join('')||'<p class="muted">未找到匹配知识，试试参数名、字段名或工作现象。</p>';
 }

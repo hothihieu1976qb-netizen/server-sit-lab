@@ -2,33 +2,68 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SIT Lab · 服务器 SIT 实际工作能力训练平台</title>
+  <title>Linux 实训台 · 我的学习主线</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="training.css">
   <link rel="stylesheet" href="coach.css">
   <link rel="stylesheet" href="academy.css">
   <link rel="stylesheet" href="experience.css">
   <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="linux-path.css">
   <meta name="theme-color" content="#0b0e11">
 </head>
 <body>
 <aside class="sidebar">
-  <a class="brand" href="#home" aria-label="SIT Lab 首页"><span class="brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 3 12 7-12 7L4 10 16 3Z"/><path d="m4 16 12 7 12-7M4 22l12 7 12-7"/></svg></span><span>SIT<span class="brand-light"> LAB</span><small>THE ENGINEERING PLAYGROUND</small></span></a>
+  <a class="brand" href="#home" aria-label="Linux 实训台首页"><span class="brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 3 12 7-12 7L4 10 16 3Z"/><path d="m4 16 12 7 12-7M4 22l12 7 12-7"/></svg></span><span>Linux<span class="brand-light"> 实训台</span><small>LINUX PRACTICE LAB</small></span></a>
   <button class="side-search" data-studio="search"><span data-icon="search"></span><span>搜索课程与工具</span><kbd>Ctrl K</kbd></button>
   <div class="nav-label">WORKSPACE <span>工作空间</span></div>
   <nav id="nav" aria-label="主导航"></nav>
-  <div class="sidebar-tools"><div class="nav-label">QUICK ACCESS <span>快捷工具</span></div><button data-go="terminal"><span data-icon="terminal"></span><span>Linux 终端</span><kbd>↗</kbd></button><button data-go="fio"><span data-icon="hard-drive"></span><span>磁盘性能</span></button><button data-go="network"><span data-icon="network"></span><span>网络性能</span></button><button data-go="stress"><span data-icon="activity"></span><span>压力与稳定性</span></button><button data-go="reference"><span data-icon="book-open"></span><span>命令手册</span></button></div>
+  <div class="sidebar-tools"><div class="nav-label">QUICK ACCESS <span>快捷工具</span></div><button data-go="terminal"><span data-icon="terminal"></span><span>Linux 终端</span><kbd>↗</kbd></button><button data-go="catalog"><span data-icon="layers"></span><span>课程目录</span></button><button data-go="real-labs"><span data-icon="workflow"></span><span>真实环境工单</span></button><button data-go="reference"><span data-icon="book-open"></span><span>命令手册</span></button></div>
   <div class="side-bottom"><div class="local-node"><span class="status-dot"></span><b>本地模拟工作空间</b><span class="local-mark">LOCAL</span></div><small>无需安装，学习记录保存在本机。</small><div class="side-signature"><span>LEARN. BREAK. UNDERSTAND.</span><span>↗</span></div></div>
 </aside>
 <button class="sidebar-scrim" data-studio="menu-close" aria-label="关闭导航" hidden></button>
 <div class="shell">
   <header><div class="header-location"><button class="icon-button menu-toggle" data-studio="menu" aria-label="打开导航" aria-expanded="false"><span data-icon="menu"></span></button><div class="breadcrumb">Workspace <span>/</span> <b id="crumb">学习课程</b></div></div><div class="header-right"><span class="pill"><i></i> OFFLINE READY</span><button class="icon-button" data-studio="motion" aria-label="关闭装饰动效" aria-pressed="false" title="关闭装饰动效"><span data-icon="sparkles"></span></button><button class="icon-button" data-studio="focus" aria-label="进入专注布局" aria-pressed="false" title="进入专注布局"><span data-icon="expand"></span></button><button class="icon-button header-search" data-studio="search" aria-label="搜索课程与工具"><span data-icon="search"></span></button><span class="workspace-avatar" aria-label="本地学习者">S</span></div></header>
-  <div class="notice"><span data-icon="shield-check"></span><strong>模拟环境，非真实 Linux 系统</strong><span>命令与数据均为教学模拟，不操作真实硬件。</span><span class="notice-end">BROWSER NATIVE <i>↗</i></span></div>
+  <div class="notice"><span data-icon="shield-check"></span><strong id="environment-badge">模拟环境，非真实 Linux 系统</strong><span id="environment-detail">命令与数据均为教学模拟，不操作真实硬件。</span><span class="notice-end">BROWSER NATIVE <i>↗</i></span></div>
   <main>
-    <div class="page-heading"><div><div class="eyebrow" id="eyebrow">SERVER WORKSPACE</div><h1 id="page-title">服务器概览</h1><p id="page-desc"></p></div><div id="page-status" class="small-label">● 教学服务器在线</div></div>
+    <div class="page-heading"><div><div class="eyebrow" id="eyebrow">LINUX WORKSPACE</div><h1 id="page-title">我的学习主线</h1><p id="page-desc"></p></div><div id="page-status" class="small-label">● 教学服务器在线</div></div>
     <div id="section-tabs" class="section-tabs" aria-label="当前工作区页面"></div><div id="session-bar" class="session-bar"></div>
     <section id="view-home" class="view" hidden><div id="learning-home"></div></section>
+    <section id="view-catalog" class="view" hidden><div id="learning-catalog"></div></section>
     <section id="view-lesson" class="view" hidden><div id="guided-intro"></div><div id="guided-terminal" class="practice-terminal"></div><div id="guided-exercise" class="guided-exercise"></div></section>
+    <section id="view-real-labs" class="view" hidden>
+      <div id="real-lab-tabs" class="work-tracks" role="group" aria-label="真实容器工单"></div>
+      <div id="real-lab-prep"></div>
+      <div id="backup-real-lab">
+      <div class="panel real-lab-overview">
+        <p class="section-kicker">OPS-003 · 真实容器实训 · 中级</p>
+        <h2>业务数据丢失：从备份恢复订单服务</h2>
+        <p>你是接班工程师。订单接口仍返回 HTTP 200，但部分订单查不到。把备份恢复到新的数据库，在保持原库不被覆盖的前提下，确认恢复了哪些记录、还有哪些需要补录，并提交交接证据。</p>
+        <p class="info-box">命令在自己的系统终端运行。需要 Docker Engine 和 Compose；首次启动需拉取镜像，导出证据需 Node.js 20 或更新版本。下方浏览器工具只读取你选择的证据文件。</p>
+        <a href="labs/backup-restore/README.md">打开完整操作手册 ↗</a>
+      </div>
+      <div class="real-lab-steps">
+        <details class="panel" open><summary>01 · 启动业务环境，采集 API 基线</summary><p>从项目根目录执行。在 API 记下初始订单编号、状态和金额。</p><pre><code>cd labs/backup-restore
+docker compose up -d source-api
+docker compose ps
+curl -fsS 'http://127.0.0.1:18743/orders?order=reference'</code></pre><p>PowerShell 中请使用 <code>curl.exe</code>。若接口尚未就绪，查看 <code>docker compose logs source-api</code>，再重试。</p></details>
+        <details class="panel"><summary>02 · 生成并核对备份，再触发演练故障</summary><p>先备份，再写入备份点之后的新订单，最后模拟误删。把命令输出中的备份编号记下来，后面用同一份文件恢复。</p><pre><code>docker compose run --rm --no-deps tools backup
+docker compose run --rm --no-deps tools list ARCHIVE_ID
+docker compose exec -T source-db psql -U lab_owner -d orders -v ON_ERROR_STOP=1 -f /fixtures/late-write.sql
+docker compose exec -T source-db psql -U lab_owner -d orders -v ON_ERROR_STOP=1 -f /fixtures/incident.sql
+curl -fsS 'http://127.0.0.1:18743/orders?order=reference'</code></pre><p><code>ARCHIVE_ID</code> 是占位符。备份文件出现在 <code>artifacts</code>，不在数据库的数据卷里。</p></details>
+        <details class="panel"><summary>03 · 恢复到隔离库，对照 SQL 与真实 API</summary><p>恢复脚本先核对备份摘要与目录，再写入恢复库。只在恢复结束后启动恢复 API。</p><pre><code>docker compose --profile recovery up -d --wait recovery-db
+docker compose run --rm --no-deps tools restore ARCHIVE_ID
+docker compose --profile recovery up -d recovery-api
+curl -fsS 'http://127.0.0.1:18744/orders?order=reference'
+node verify.mjs ARCHIVE_ID</code></pre><p>检查 <code>artifacts/ARCHIVE_ID/ops003-evidence.json</code> 的结果。单看 HTTP 200，不能证明业务记录完整。</p></details>
+        <details class="panel"><summary>04 · 验证自动化失败，保留上一次有效备份</summary><p>用一次无效口令模拟连接失败。记录退出码，再验证已经生成的备份仍能读。</p><pre><code>docker compose run --rm --no-deps -e PGPASSWORD=invalid tools backup
+docker compose run --rm --no-deps tools verify ARCHIVE_ID</code></pre><p>第一条应返回非零退出码；错误记在 <code>artifacts/operations.log</code>。在交接里说明旧备份是否仍有效，哪些订单需要补录。</p></details>
+      </div>
+      <section class="panel real-lab-overview" aria-labelledby="real-lab-evidence-title"><h2 id="real-lab-evidence-title">导入现场证据</h2><p>选择刚生成的 <code>ops003-evidence.json</code>。对照原业务与恢复环境的 SQL 和 HTTP 记录，并查看可观察到的数据缺口。</p><label>实训证据（JSON）<input type="file" id="ops003-evidence-file" accept=".json,application/json"></label><p id="ops003-evidence-status" role="status"></p><div id="ops003-evidence-result"></div><div id="ops003-handoff" hidden><label>交接说明<textarea id="ops003-handoff-notes" maxlength="8000" rows="5" placeholder="哪些记录已恢复？备份点之后的数据如何处理？自动化失败返回了什么？"></textarea></label><button id="ops003-handoff-export" type="button">导出恢复交接</button></div></section>
+      </div>
+      <div id="field-real-lab" hidden></div>
+    </section>
     <section id="view-cases" class="view" hidden><div id="case-intro"></div><div id="case-experiment"></div><div id="case-terminal" class="practice-terminal"></div><div id="case-results"></div></section>
     <section id="view-assessment" class="view" hidden><div id="assessment-board"></div></section>
     <section id="view-academy" class="view" hidden><div id="academy-board"></div></section>
@@ -45,7 +80,7 @@
     <section id="view-terminal" class="view" hidden><div id="terminal-home">
       <div id="work-toolbar" class="work-toolbar"><div class="session-kind"><span class="status-dot"></span><b id="session-kind">自由实训</b></div><div id="learning-stats" class="learning-stats"></div><button id="lesson-toggle">折叠命令解析</button></div><div id="work-task" class="work-task"></div><div id="coach-layout" class="coach-layout"><div class="terminal-column">
       <div class="quick-commands"><span>快捷输入</span><button data-cmd="uname -a">系统信息</button><button data-cmd="lsblk -f">磁盘</button><button data-cmd="ip -br link">网卡</button><button data-cmd="dmesg -T">内核日志</button><button data-cmd="help">帮助</button></div>
-      <div class="terminal"><div class="terminal-title"><div><i></i><i></i><i></i><span>student@sit-server-01: ~</span></div><span id="terminal-execution-status">READY</span><button id="clear-terminal">清屏</button></div><div id="terminal-output" class="terminal-output" role="log" aria-label="终端输出"></div><form id="terminal-form" autocomplete="off"><label for="command">student@sit-server:~$</label><input id="command" spellcheck="false" autocapitalize="off" placeholder="输入命令，如 lscpu，然后按 Enter" aria-label="Linux 模拟命令"><button type="submit">执行 ↵</button></form></div>
+      <div class="terminal"><div class="terminal-title"><div><i></i><i></i><i></i><span>student@sit-server-01: ~</span></div><span id="terminal-execution-status">READY</span><button id="clear-terminal">清屏</button></div><div id="terminal-output" class="terminal-output" role="log" aria-label="终端输出"></div><form id="terminal-form" autocomplete="off"><label for="command">student@sit-server-01:~$</label><input id="command" spellcheck="false" autocapitalize="off" placeholder="输入命令，如 lscpu，然后按 Enter" aria-label="Linux 模拟命令"><button type="submit">执行 ↵</button></form></div>
       <div class="terminal-footer"><span>↑ ↓ 历史命令 · Ctrl+L 清屏 · Ctrl+C 停止模拟负载</span><span>top / vmstat 输出单次快照，再次执行可刷新</span></div><div id="terminal-scenario" class="info-box"></div></div><aside class="command-coach" aria-label="命令学习解析区"><div class="coach-heading"><span class="tag">COMMAND LEARNING</span><b>命令学习解析</b></div><div id="command-lesson" aria-live="polite"></div></aside></div>
     </div></section>
     <section id="view-hardware" class="view" hidden><div class="panel"><div class="panel-title"><h2>固定测试环境</h2><span class="tag">虚构教学配置</span></div><div id="hardware-info"></div></div><div class="panel spaced"><h2>识别硬件的三个层次</h2><p class="muted">PCI 设备存在 → 驱动加载并绑定 → 系统接口创建。三个层次需要分别检查。</p><div class="quick-commands"><button data-cmd="lspci -nnk">检查 PCI 与驱动绑定</button><button data-cmd="lsmod">查看已加载模块</button><button data-cmd="ip -br link">查看网卡接口</button></div></div></section>
@@ -57,14 +92,15 @@
     <section id="view-faults" class="view" hidden><div class="panel fault-toolbar"><label>故障场景<select id="scene-select"></select></label><div class="inline-actions"><button id="load-scene" class="primary">加载所选故障</button><button id="random-scene">随机故障</button><label class="checkbox"><input id="free-mode" type="checkbox">自由排查：不显示提示或清单</label></div></div><details id="case-library" class="spaced"><summary>浏览全部14个故障案例</summary><div id="scenario-cards" class="scenario-grid spaced"></div></details><div id="scenario-workbench" class="spaced"></div></section>
     <section id="view-bugs" class="view" hidden><div class="two-col lab-layout"><form id="bug-form" class="panel"><div class="panel-title"><h2>提交模拟缺陷</h2><span class="tag">BUG REPORT</span></div><label>关联故障<select id="bug-scene"><option value="">一般缺陷（无自动修复包）</option><option value="nic">重启后网卡消失</option><option value="link">百兆协商</option><option value="io">压力时 I/O Error</option><option value="fio">fio 性能偏低</option></select></label><label>Bug 标题<input name="title" required placeholder="现象 + 发生条件"></label><label>测试环境<textarea name="environment" required rows="2">SIT-SERVER-01 / 银河麒麟 V10（模拟） / x86_64 / 16GB / 教学版本 1.0</textarea></label><label>复现步骤<textarea name="steps" required rows="3" placeholder="1. 前置条件… 2. 执行命令… 3. 观察…"></textarea></label><div class="form-grid"><label>预期结果<textarea name="expected" required rows="2"></textarea></label><label>实际结果<textarea name="actual" required rows="2"></textarea></label></div><label>复现频率<input name="frequency" required placeholder="如 3 次中出现 3 次（按实际练习填写）"></label><label>日志信息<textarea name="logs" required rows="4" placeholder="粘贴命令输出，或导入当前场景的已保存日志"></textarea></label><button id="import-evidence" type="button">导入已保存证据</button><label>缺陷结论<textarea name="conclusion" required rows="2" placeholder="影响、证据、初步定位和待确认事项"></textarea></label><button class="primary full" type="submit">提交模拟 Bug</button><p class="muted">仅保存在当前浏览器，不会发送给任何人。</p></form><div><div class="section-heading"><h2>缺陷与回归记录</h2><button id="export-bugs">导出 JSON</button></div><div id="bug-list"></div></div></div></section>
     <section id="view-interview" class="view" hidden><div class="interview-layout"><div class="panel interview-card"><div class="panel-title"><span class="tag">TECHNICAL REVIEW</span><select id="interview-category" aria-label="技术复盘分类"></select><span id="question-counter"></span></div><div class="interview-progress"><i id="interview-progress"></i></div><p id="interview-progress-text" class="muted"></p><h2 id="question-text"></h2><p class="muted">用自己的话回答，按实际工作说明目的、方法、观察指标、判断依据和异常处理。</p><textarea id="interview-answer" rows="7" placeholder="你可以这样开始：我理解……在实验环境中，我会先……"></textarea><div class="inline-actions"><button class="primary" id="evaluate-answer">提交回答并点评</button><button id="retry-answer">重新回答</button><button id="next-question">下一题 →</button><button id="followup-question">进入追问模式</button></div><div id="interview-feedback" aria-live="polite"></div></div><div class="panel"><h2>练习方式</h2><p class="muted">一次一题，先回答再看参考。答完后补上遗漏点，再练一次。</p><div class="info-box">点评按知识点、解释关系、操作方法和常见误解评分，显示每项依据，不调用AI服务。本地规则无法完整理解语义，请结合参考答案复核。</div><h3>推荐回答结构</h3><ol class="answer-steps"><li>目的：验证什么？</li><li>方法：怎么测、用什么命令？</li><li>指标：看什么证据？</li><li>异常：如何记录、定位和回归？</li></ol></div></div></section>
-    <section id="view-reference" class="view" hidden><div class="panel"><div class="panel-title"><h2>随手查，随时练</h2><span class="tag">基于本地 Word 手册</span></div><input id="reference-search" placeholder="搜索命令、指标或参数，如 iodepth" aria-label="搜索知识速查"><div id="reference-list"></div></div></section>
-  </main><footer><span>SIT LAB / 服务器 SIT 学习平台</span><span>数据仅供流程练习，不能代表真实服务器性能或兼容性。</span></footer>
+    <section id="view-reference" class="view" hidden><div class="panel"><div class="panel-title"><h2>随手查，随时练</h2><span class="tag">离线命令手册</span></div><input id="reference-search" placeholder="搜索命令、指标或参数，如 iodepth" aria-label="搜索知识速查"><div id="reference-list"></div></div></section>
+  </main><footer><span>Linux 实训台</span><span>数据仅供流程练习，不能代表真实服务器性能或兼容性。</span></footer>
 </div><div id="toast" role="status"></div>
 <dialog id="studio-search" aria-labelledby="studio-search-title"><form method="dialog" class="search-titlebar"><span data-icon="search"></span><label id="studio-search-title" for="studio-search-input">快速前往</label><button class="icon-button" aria-label="关闭搜索">Esc</button></form><input id="studio-search-input" autocomplete="off" placeholder="搜索课程、fio、网络、日志…"><div id="studio-search-results"></div><div class="search-footer"><span>↑ ↓ 选择　↵ 打开</span><span>课程 / 实验工具</span></div></dialog>
 <script src="assets/lucide/icons.js"></script>
 <script src="studio.js"></script>
 <script src="content.js"></script>
 <script src="training.js"></script>
+<script src="host-ops-lab.js"></script>
 <script src="coach.js"></script>
 <script src="command-teaching.js"></script>
 <script src="curriculum.js"></script>
@@ -73,12 +109,29 @@
 <script src="system-lab.js"></script>
 <script src="host-lab.js"></script>
 <script src="kernel-model.js"></script>
+<script src="file-lab.js"></script>
+<script src="account-lab.js"></script>
+<script src="package-lab.js"></script>
+<script src="linux-work-lab.js"></script>
 <script src="practice-engine.js"></script>
 <script src="practice-storage.js"></script>
 <script src="guided-courses.js"></script>
+<script src="linux-work-courses.js"></script>
+<script src="host-ops-course.js"></script>
+<script src="linux-foundations.js"></script>
+<script src="file-courses.js"></script>
+<script src="account-courses.js"></script>
+<script src="package-courses.js"></script>
 <script src="extended-courses.js"></script>
 <script src="lesson-literacy.js"></script>
+<script src="linux-path.js"></script>
+<script src="course-teaching.js"></script>
+<script src="beginner-teaching.js"></script>
+<script src="topic-teaching.js"></script>
+<script src="real-teaching.js"></script>
 <script src="experience.js"></script>
+<script src="field-labs-web.js"></script>
 <script src="engine-bridge.js"></script>
 <script src="app.js"></script>
+<script src="backup-lab-web.js"></script>
 </body></html>

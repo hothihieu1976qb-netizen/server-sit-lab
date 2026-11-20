@@ -71,6 +71,7 @@ function renderAcademy(){
  const count=courseCounts(),lesson=SIT_COURSE.find(l=>l.id===S.academy.selected)||recommendedCourse();S.academy.selected=lesson.id;
  const stage=SIT_STAGES.find(s=>s[0]===lesson.stage),open=S.ui.openStage||stage[0];
  $('academy-board').innerHTML=`<div class="learning-intro"><div><span class="eyebrow">LEARNING PATH</span><h2>从Linux基础，到独立承担SIT任务</h2><p>命令基础作为查漏，主线训练系统分层、测试设计、数据分析和项目闭环。按任务推进，不按天数速成。</p></div><div class="learning-count"><b>${count.reviewed}<small> / ${SIT_COURSE.length}</small></b><span>单元完成自评复盘</span></div></div><div class="learning-shell"><aside class="course-outline ${S.ui.outlineExpanded?'outline-expanded':''}"><div class="outline-heading"><b>课程目录</b><button class="outline-toggle" data-action="toggle-course-outline">切换阶段</button><button data-action="continue-learning">继续学习 →</button></div>${SIT_STAGES.map(([id,no,title])=>`<section><button class="outline-stage ${open===id?'open':''}" data-course-stage="${id}"><small>${no}</small><span>${title}</span><i>${open===id?'−':'+'}</i></button>${open===id?'<div class="outline-lessons">'+SIT_COURSE.filter(l=>l.stage===id).map(l=>`<button data-course="${l.id}" class="${l.id===lesson.id?'selected':''}"><span>${l.id==='shell'?'Linux操作习惯查漏':l.title}</span><small>${courseStatus(l.id)}</small></button>`).join('')+'</div>':''}</section>`).join('')}<div class="outline-footer"><p>学习记录是课程自评；工程验收和独立考核分开记录。</p><details><summary>备份学习档案</summary><button data-action="export-academy">导出JSON档案</button><button data-action="export-academy-notes">导出Markdown笔记</button></details></div></aside><div id="course-workspace">${renderCourse(lesson)}</div></div>`;
+ renderAcademyCommandGuide(lesson);
 }
 function renderCourse(lesson){
  const r=courseRecord(lesson.id),step=S.ui.courseStep||1,index=SIT_COURSE.indexOf(lesson),other=S.academy.activeLesson&&S.academy.activeLesson!==lesson.id?SIT_COURSE.find(l=>l.id===S.academy.activeLesson):null;
@@ -151,6 +152,7 @@ function academyExport(markdown=false){
   downloadText('SIT成长学习笔记.md',text,'text/markdown;charset=utf-8');
 }
 function handleAcademyClick(button){
+ if(button.hasAttribute('data-academy-guide-index')){S.ui.academyGuide={lessonId:S.academy.selected,index:Number(button.dataset.academyGuideIndex)};persist();renderAcademy();$('academy-command-guide').scrollIntoView({block:'start'});return true;}
  if(button.dataset.course){viewCourse(button.dataset.course);return true;}
  if(button.dataset.courseStep){S.ui.courseStep=Number(button.dataset.courseStep);persist();renderAcademy();return true;}
  if(button.dataset.courseStage){S.ui.openStage=button.dataset.courseStage;persist();renderAcademy();return true;}
@@ -225,7 +227,7 @@ function syncActiveCourseArtifacts(){
  const r=courseRecord(S.academy.activeLesson);if(r)syncCourseArtifacts(r);
 }
 function renderCourseUnderstanding(l,r){
- return `<div class="reading-lead"><b>先把已有Linux基础接到SIT工作上</b><p>${l.id==='shell'?'本节用于查漏：如果命令语法已经熟悉，重点核对目标路径、权限与证据习惯，不必机械重学所有命令。':'本课先回答“验证什么、为什么这样做、结论能到哪里”，命令是后面的执行工具。'}</p></div><div class="course-concepts">${l.concepts.map(([title,text],i)=>`<section><span>${i+1}</span><div><h3>${title}</h3><p>${text}</p></div></section>`).join('')}</div>${l.sources?.length?'<details class="source-links"><summary>原始资料：可离线学，联网时选读</summary>'+l.sources.map(k=>`<a href="${COURSE_SOURCES[k][1]}" target="_blank" rel="noreferrer">${COURSE_SOURCES[k][0]} ↗</a>`).join('')+'</details>':''}`;
+ return `${topicPrelude(l)}<div class="reading-lead"><b>先把已有Linux基础接到SIT工作上</b><p>${l.id==='shell'?'本节用于查漏：如果命令语法已经熟悉，重点核对目标路径、权限与证据习惯，不必机械重学所有命令。':'本课先回答“验证什么、为什么这样做、结论能到哪里”，命令是后面的执行工具。'}</p></div><div class="course-concepts">${l.concepts.map(([title,text],i)=>`<section><span>${i+1}</span><div><h3>${title}</h3><p>${text}</p></div></section>`).join('')}</div>${l.commands?.length?'<section id="academy-command-guide" class="starter-guide" aria-label="本专题逐条命令导读"></section>':''}${l.sources?.length?'<details class="source-links"><summary>原始资料：可离线学，联网时选读</summary>'+l.sources.map(k=>`<a href="${COURSE_SOURCES[k][1]}" target="_blank" rel="noreferrer">${COURSE_SOURCES[k][0]} ↗</a>`).join('')+'</details>':''}`;
 }
 function renderCourseTask(l,r){
  const checks=r?courseChecks(l,r):[],mismatch=r&&r.projectId!==S.project.id;

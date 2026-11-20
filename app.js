@@ -3,11 +3,13 @@
 const $ = id => document.getElementById(id);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const navItems = [
-  ['home','◫','学习课程',''],
+  ['home','◫','我的学习主线',''],
+  ['catalog','◫','课程目录','浏览共同基础、Linux 工单和服务器 SIT 专项。'],
   ['lesson','◫','同页实训',''],
+  ['real-labs','▦','真实容器实训','用本地容器执行真实命令，将取得的证据导入平台复盘。'],
   ['cases','◇','工作问题复现',''],
   ['assessment','◎','独立考核','在单独工程检验操作、分析和交付，交卷后统一复盘。'],
-  ['academy','◫','学习路径','以中级SIT工作方法为目标，按任务学习、实操、提交产物与复盘。'],
+  ['academy','◫','服务器 SIT 专题','以中级SIT工作方法为目标，按任务学习、实操、提交产物与复盘。'],
   ['project','◉','工程与报告','银河麒麟 V10 服务器兼容性与稳定性测试项目 · 八阶段实训'],
   ['overview','▦','服务器概览','确认环境，规划一次属于你的服务器测试。'],
   ['terminal','›_','终端实训','输入命令，观察设备、驱动、日志与测试结果。'],
@@ -23,18 +25,18 @@ const navItems = [
   ['reference','≡','命令手册','常用命令与核心参数，一查就能接着练。']
 ];
 const NAV_GROUPS=[
- ['study','◫','学习课程','home',['home','lesson','academy']],
+ ['study','◫','学习主线','home',['home','catalog','lesson','real-labs','academy']],
  ['work','›_','实验室','cases',['cases','terminal','overview','hardware','fio','network','stress','faults']],
  ['review','▤','我的学习','mistakes',['mistakes','reference','learning','project','bugs','assessment','interview']]
 ];
 function renderNavigation(){
  const group=NAV_GROUPS.find(g=>g[4].includes(S.page))||NAV_GROUPS[0];
- $('nav').innerHTML=NAV_GROUPS.map(([id,icon,label,landing])=>`<button data-go="${landing}" title="${label}" aria-label="${label}" class="${id===group[0]?'active':''}" ${id===group[0]?'aria-current="page"':''}><span class="nav-icon">${studioIcon({study:'layers',work:'flask-conical',review:'chart-no-axes-combined'}[id])}</span><span class="nav-text">${label}</span>${id==='study'?'<span class="nav-count">'+GUIDED_COURSES.length+'</span>':''}</button>`).join('');
+ $('nav').innerHTML=NAV_GROUPS.map(([id,icon,label,landing])=>`<button data-go="${landing}" title="${label}" aria-label="${label}" class="${id===group[0]?'active':''}" ${id===group[0]?'aria-current="page"':''}><span class="nav-icon">${studioIcon({study:'layers',work:'flask-conical',review:'chart-no-axes-combined'}[id])}</span><span class="nav-text">${label}</span></button>`).join('');
  const visibleTabs=assessmentActive()?['assessment','terminal','project','bugs']:group[4].filter(id=>id!=='lesson');
  $('section-tabs').hidden=['home','lesson','cases'].includes(S.page);
  $('section-tabs').innerHTML=visibleTabs.map(id=>{const item=navItems.find(n=>n[0]===id);return `<button data-go="${id}" class="${S.page===id?'active':''}" ${S.page===id?'aria-current="page"':''}>${item[2]}</button>`;}).join('');
  const pageName=navItems.find(n=>n[0]===S.page)[2];
- $('crumb').textContent=group[2]+(pageName===group[2]?'':' / '+pageName);
+ $('crumb').textContent=S.page==='home'?pageName:group[2]+(pageName===group[2]?'':' / '+pageName);
 }
 let stored = {};
 try { stored = JSON.parse(localStorage.getItem('sit-lab-v1') || '{}'); } catch (_) {}
@@ -44,7 +46,7 @@ const S = {
   academy:stored.academy || {selected:null,activeLesson:null,records:{},pace:'task'},
   coach:stored.coach || {mode:'guided',hidden:false,learned:{},mastered:{},mistakes:{},events:[],seq:0,quizCycle:0,guided:0,guideSince:0,workHint:false,exam:null},
   lastLesson:null,currentMemoryQuiz:null,operationFollowups:null,
-  page:'overview', scene:null, fixed:false, generation:0, evidence:new Set(), captures:[], saved:'',
+  page:'home', scene:null, fixed:false, generation:0, evidence:new Set(), captures:[], saved:'',
   hints:0, explanation:false, diagnosisMessage:'', boot:1, ioError:false,
   stress:null, cpu:3, memory:2.1, swap:0, peerServer:false, localServer:false, peerPort:5201, localPort:5201,
   netFault:'none', stressFault:'normal', resourceMessages:[], simTime:0, freeMode:false, fioRuns:[], netRuns:[], selectedFio:[], followup:null, report:null,
@@ -83,7 +85,7 @@ function restoreSession(snapshot){
   if(S.scene&&S.captures.length){
     $('terminal-output').replaceChildren();
     for(const capture of S.captures){
-      appendTerminal('student@sit-server:~$ '+capture.command,'prompt');
+      appendTerminal('student@sit-server-01:~$ '+capture.command,'prompt');
       if(capture.output)appendTerminal(capture.output);
     }
   }
@@ -97,20 +99,41 @@ function restoreSession(snapshot){
 function practice(key) { if (!S.practiced.includes(key)) { S.practiced.push(key); persist(); } }
 function fault(id) { return S.scene===id && !S.fixed; }
 function note(key) { if(S.scene) S.evidence.add(key); }
-function showPage(id,updateHash=true){
+function showPage(id,updateHash=true,resetLesson=false){
+  const previousRoute=document.body.dataset.route;
+  const lessonRoute=id.startsWith('lesson/');
+  const course=lessonRoute?GUIDED_COURSES_BY_ID.get(id.slice('lesson/'.length)):null;
+  if(lessonRoute)id=course?'lesson':'home';
+  const fieldRoute=id.startsWith('real-labs/');
+  const fieldLab=fieldRoute?realLabByRoute(id.slice('real-labs/'.length)):null;
+  if(fieldRoute)id='real-labs';
   if(!allowWorkPage(id)){id='terminal';toast('考核中只开放终端、交付和任务书；交卷后再查看教学资料。');}
   if(['lesson','cases'].includes(id)&&(S.busy.fio||S.busy.network)){toast('当前模拟测试正在收尾，结束后即可切换。');return;}
-  if(id==='lesson'&&!getGuidedRun()){startGuided();return;}
+  if(id==='lesson')prepareGuidedCourse(course||currentGuidedCourse(),resetLesson);
   const item=navItems.find(n=>n[0]===id)||navItems.find(n=>n[0]==='home');S.page=item[0];
+  const realLab=S.page==='real-labs';
+  $('environment-badge').textContent=realLab?'真实容器实训 · 在本地终端执行':'模拟环境，非真实 Linux 系统';
+  $('environment-detail').textContent=realLab?'浏览器只核对导入的证据。':'命令与数据均为教学模拟，不操作真实硬件。';
+  if(realLab){
+    const key=fieldLab?.key||'ops-003';
+    renderRealLab(fieldLab);
+    $('real-lab-prep').innerHTML=knowledgeShelf(COURSE_KNOWLEDGE[key]);
+    S.ui.lastLinuxTask=key;persist();
+  }else if(S.page==='lesson'&&LINUX_PATH.some(stage=>stage.items.includes(currentGuidedCourse().id))){
+    S.ui.lastLinuxTask=currentGuidedCourse().id;persist();
+  }
   document.body.classList.toggle('learning-experience',['home','lesson','cases'].includes(S.page));
   document.querySelectorAll('.view').forEach(view=>view.hidden=view.id!=='view-'+S.page);
-  $('page-title').textContent=item[2];$('page-desc').textContent=item[3];$('eyebrow').textContent='SIT LEARNING WORKSPACE';
-  if(updateHash&&location.hash!=='#'+S.page)history.replaceState(null,'','#'+S.page);
+  $('page-title').textContent=item[2];$('page-desc').textContent=item[3];$('eyebrow').textContent='LINUX PRACTICE LAB';
+  const fragment='#'+(S.page==='lesson'?'lesson/'+currentGuidedCourse().id:realLab&&fieldLab?'real-labs/'+fieldLab.key:S.page);
+  if((updateHash||lessonRoute||fieldRoute||S.page==='lesson')&&location.hash!==fragment)history.replaceState(null,'',fragment);
   practiceTerminal(S.page);
   if(['home','lesson','cases'].includes(S.page))renderWorkMode();else refresh();
   renderNavigation();renderExperiencePage();
   if(S.page==='academy')renderAcademy();if(S.page==='mistakes')renderMistakes();if(S.page==='terminal')$('command').focus();
   renderKernelWorkbench();studioPageChanged();
+  document.body.dataset.route=fragment;
+  if(previousRoute&&previousRoute!==fragment)window.scrollTo({top:0,behavior:'instant'});
 }
 function appendTerminal(text, kind='') {
   const line=document.createElement('pre'); line.className=kind; line.textContent=text; $('terminal-output').appendChild(line);
@@ -383,7 +406,7 @@ async function execute(command) {
   const raw=String(command).trim();if(!raw)return '';
   const practiceRun=currentPractice(),parsed=analyseInput(raw);
   if(practiceRun)return executePractice(parsed,practiceRun);
-  S.history.push(raw);S.historyIndex=S.history.length;appendTerminal('student@sit-server:~$ '+raw,'prompt');
+  S.history.push(raw);S.historyIndex=S.history.length;appendTerminal('student@sit-server-01:~$ '+raw,'prompt');
   S.lastCoreResult=null;S.unifiedOutput=false;
   const underLoad=!!S.stress,operationContext={...evidenceEnvironment(),projectId:S.project.id,lessonId:S.academy.activeLesson||null,attemptId:courseRecord(S.academy.activeLesson)?.attemptId||null,loadId:S.stress?.runId||null};let original;
   $('terminal-execution-status').textContent='RUNNING';

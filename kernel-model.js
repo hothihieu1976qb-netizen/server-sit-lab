@@ -126,6 +126,7 @@ function advanceMachineTime(m,seconds){
     if(m.load&&m.load.elapsed>=m.load.duration)finishModelLoad(m,'timeout');
   }
   const after=modelMemory(m);m.vmRates={si:Math.max(0,before.swap-after.swap)*1024/seconds,so:Math.max(0,after.swap-before.swap)*1024/seconds};m.ioStats.seconds+=seconds;
+  if(m.ops)advanceHostOpsClock(m,seconds);
   return modelResourceSample(m);
 }
 
@@ -169,7 +170,8 @@ function virtualFileError(m,path,write=false,creating=false){
 function createVirtualFile(m,path,sizeMiB=0,content=''){
   const old=m.files[path],delta=Math.max(0,sizeMiB-(old?.sizeMiB||0));
   if(path.startsWith('/mnt/sit/')){if(!old)m.inodeUsed++;m.writtenMiB+=delta;}
-  m.files[path]={sizeMiB,content,owner:'student',group:'sitqa',mode:'rw-r--r--',inode:old?.inode||m.inodeUsed};
+  m.files[path]={sizeMiB,content,owner:old?.owner||'student',group:old?.group||'student',mode:old?.mode||'rw-r--r--',inode:old?.inode||m.inodeUsed};
+  if(m.fileTraining)m.fileTraining.revision++;
   if(path==='/mnt/sit/test.bin')m.fileMiB=sizeMiB;if(path===LAB_PROBE)m.probeExists=true;
   return m.files[path];
 }
@@ -196,16 +198,15 @@ function runKernelModelCommand(m,segment){
     const values=m.diskError?[0,0,0,0,841,99]:m.diskBusy?[900,4500,12,260,35,99]:Object.values(r);
     return modelResult('Device r/s w/s rMiB/s wMiB/s await %util\nsda 0 0 0 0 0 0'+(labDiskVisible(m)?'\nsdb '+values.map(n=>Number(n).toFixed(2)).join(' '):''),'disk-stats',{busy:m.diskBusy,present:labDiskVisible(m),ioError:m.diskError});
   }
-  if(command==='systemctl'&&a[0]==='list-units')return modelResult('UNIT LOAD ACTIVE SUB\nNetworkManager.service loaded active running\nsit-agent.service loaded '+(m.serviceStatus==='active'?'active running':'failed failed')+'\nmnt-sit.mount loaded '+(m.mounted?'active mounted':'inactive dead'),'units');
+  if(command==='systemctl'&&a[0]==='list-units')return modelResult('UNIT LOAD ACTIVE SUB\nNetworkManager.service loaded active running\nsit-agent.service loaded '+(m.serviceStatus==='active'?'active running':'failed failed')+'\nmnt-sit.mount loaded '+(m.mounted?'active mounted':'inactive dead')+(m.ops?.active?'\ncrond.service loaded active running':''),'units');
   if(command==='systemctl'&&a[0]==='status'&&['NetworkManager','NetworkManager.service'].includes(a[1]))return modelResult('NetworkManager.service - Network Manager\nActive: active (running)\nMain PID: 602 (NetworkManager)','service-status',{active:true});
   if(['tail','less','grep'].includes(command)||command==='cat'&&a[0]==='/var/log/messages'){
     const path=a.find(v=>v.startsWith('/')),failure=path&&path!=='/var/log/messages'?virtualFileError(m,path):null;
     if(failure)return modelError(command+': '+failure[1],'file-read',failure[0]);
     let text=path==='/var/log/messages'?m.journal.map(e=>e.message).join('\n'):m.files[path]?.content;
     if(text===undefined)return modelError(command+': No such virtual file','file-read','no-file',2);
-    if(command==='tail')text=text.split('\n').slice(-Number(opts['-n']||10)).join('\n');
-    if(command==='grep'){const term=a[0];text=text.split('\n').filter(line=>opts['-i']?line.toLowerCase().includes(term.toLowerCase()):line.includes(term)).join('\n');}
-    return {output:text,kind:'file-read',exitCode:command==='grep'&&!text?1:0};
+    if(command==='tail'||command==='grep')return {...filterLabText(segment,text),kind:'file-read',target:path};
+    return {output:text,kind:'file-read',target:path,exitCode:0};
   }
   if(command==='lsmod')return modelResult('Module        Size Used by\n'+(m.nicLoaded?'simnic       98304 '+Number(m.nicBound)+'\n':'')+(m.hbaLoaded?'simhba      163840 '+Number(m.hbaBound)+'\n':'')+'ext4        745472 2','modules',{nicLoaded:m.nicLoaded,hbaLoaded:m.hbaLoaded});
   if(command==='modinfo'){

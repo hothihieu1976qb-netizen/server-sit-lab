@@ -1,0 +1,52 @@
+name: sit-ops-platform
+
+services:
+  ledger:
+    image: sitlab/ops-platform:v1
+    build: .
+    environment:
+      SIT_ROLE: ledger
+      SIT_DATA: /data/orders.db
+      SIT_WORKERS: "2"
+      SIT_WORK_MS: "80"
+    volumes:
+      - ledger-data:/data
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/live', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  gateway:
+    image: sitlab/ops-platform:v1
+    build: .
+    environment:
+      SIT_ROLE: gateway
+      SIT_LEDGER: http://ledger:8080
+    depends_on:
+      ledger:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${SIT_GATEWAY_PORT:-18650}:8080"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    profiles: [monitoring]
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yaml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "127.0.0.1:${SIT_PROM_PORT:-18651}:9090"
+    healthcheck:
+      test: [CMD, /bin/promtool, check, ready, '--url=http://127.0.0.1:9090']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  ledger-data:

@@ -1,0 +1,4 @@
+services:
+  ledger:
+    environment:
+      SIT_WORKERS: "4"
