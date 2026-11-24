@@ -66,6 +66,7 @@ function createPracticeRun(initial){
   if(initial.fileTraining)initializeFileLab(machine,initial.fileTraining);
   if(initial.accountTraining)initializeAccountLab(machine,initial.accountTraining);
   if(initial.packageTraining)initializePackageLab(machine,initial.packageTraining);
+  if(initial.scheduleTraining)initializeScheduleLab(machine,initial.scheduleTraining);
   return {machine,events:[],sequence:0};
 }
 
@@ -132,6 +133,7 @@ function recordPracticeEvent(run,raw,result,previous,segment){
   const state=practiceState(run.machine);
   const changed=Object.keys(state).filter(key=>state[key]!==previous[key]);
   if(changed.length)run.machine.revision++;
+  if(run.machine.scheduleTraining&&changed.some(key=>['boot','reportAccess','reportDependency','cronActive','cronEnabled','cronSchedule'].includes(key)))run.machine.scheduleTraining.revision++;
   const event={
     environment:machineEnvironment(run.machine),environmentKey:environmentKey(run.machine),
     ...result,failed:Boolean(result.failed),raw,at:stamp(),seq:++run.sequence,
@@ -139,6 +141,7 @@ function recordPracticeEvent(run,raw,result,previous,segment){
     revision:run.machine.revision,fromBoot:previous.boot,changed,
     workingDirectory:previous.cwd,
     workingUser:previous.accountSession,
+    scheduleRevision:run.machine.scheduleTraining?.revision,
     command:segment?.command, target:result.target??segment?.positionals[0], fromPeer:Boolean(segment?.fromB),
     delta:changed.length?Object.fromEntries(changed.map(key=>[key,[previous[key],state[key]]])):undefined
   };

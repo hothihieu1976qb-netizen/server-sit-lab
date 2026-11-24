@@ -104,6 +104,10 @@ function renderTerms(text){
 
 function measurementExample(segment){
   const tool=segment.command;
+  if(tool==='cat'&&[HOST_CRON_TEMPLATE,HOST_CRON_FILE].includes(segment.positionals[0])){
+    const fields=[['15','分钟','每小时的第 15 分钟'],['2','小时','一天中的 02 时（24 小时制）'],['*','日','不限定当月哪一天'],['*','月','不限定月份'],['*','星期','不限定星期几'],['reportbot','执行账号','脚本以该账号的权限运行'],[HOST_REPORT_SCRIPT,'命令','脚本的绝对路径']];
+    return '<section class="starter-demo"><h4>把计划行拆成七个部分</h4><pre>'+esc(HOST_CRON_LINE)+'</pre><table><thead><tr><th>写的值</th><th>字段</th><th>表示什么</th></tr></thead><tbody>'+fields.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value)+'</td>').join('')+'</tr>').join('')+'</tbody></table><p>连起来读：每天 02:15，使用 reportbot 账号执行 collect。星号允许该字段的任意值。这里是系统 cron.d 格式；用户自己的 crontab 不添加执行账号列。</p><p>本机按 UTC 调度。初始 01:55 到 02:15 相差 20 分钟，也就是 1200 秒。先执行 date 确认本机时间。sim next-cron 只推进这台模拟机的时钟，不改变电脑时间。</p></section>';
+  }
   if(tool==='fio'){
     const block=segment.opts['--bs']||'4k',mib=sizeMiB(block);
     return '<section class="starter-demo"><h4>先用小数字读懂指标</h4><p>下面是计算示例。假设每次读 '+esc(block)+'，每秒完成 1000 次，那么 IOPS=1000，BW 约为 '+(1000*mib).toFixed(2)+' MiB/s。</p><p>次数乘每次大小得到传输量。延迟表示每次请求用了多久，接下来从实际输出同时读取这三类数据。示例数字不计入本轮测试结果。</p></section>';

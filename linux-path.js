@@ -11,6 +11,8 @@ const LINUX_PATH=[
    items:ACCOUNT_COURSES.map(c=>c.id),checkpoint:'linux-access-handoff'},
   {label:'共同基础 · 软件',icon:'layers',title:'从软件包验证到本轮任务',goal:'区分仓库、本机安装、程序搜索和实际运行，读回本轮产物再交接。',
    items:PACKAGE_COURSES.map(c=>c.id),checkpoint:'linux-package-handoff'},
+  {label:'共同基础 · 调度',icon:'workflow',title:'让服务重启后按时完成任务',goal:'分清运行与开机设置，读懂计划每一列，用派发、退出结果和新产物完成验收。',
+   items:SCHEDULE_COURSES.map(c=>c.id),checkpoint:'linux-schedule-handoff'},
   {label:'初级到中级',icon:'workflow',title:'接手一项日常工作',goal:'恢复每天的巡检报告，再接手一次 Web 发布。每次变更都要有验证和交接。',
    items:['linux-host-ops','linux-web-release']},
   {label:'中级实务',icon:'layers',title:'维护真实服务',goal:'在自己的容器环境里恢复订单、回滚发布、确认告警解除，导入现场证据。',

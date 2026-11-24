@@ -132,7 +132,12 @@ function teachingRows(segment,output,event){
   }
   if(event?.kind==='ops-schedule-read')add('计划行：分 时 日 月 星期 用户 命令',line(/^15 2 /),'每天按主机时区于 02:15 启动。cron.d 的用户字段指定 reportbot，命令使用绝对路径。');
   if(event?.kind==='ops-cron-log')add('CROND / CMD',lines.findLast(value=>value.includes(' CMD ')),'调度器已经派发命令。脚本是否完成还要查退出结果和新生成的文件。');
-  if(event?.kind==='ops-job-log')add('source / exit',lines.findLast(value=>value.includes('exit=')),'source 区分手工和定时。exit=0 表示脚本成功，仍应对照新报告的时间和来源。');
+  if(event?.kind==='ops-job-log'){
+    add('source / exit / run',lines.findLast(value=>value.includes('exit=')),'source 区分 manual 手工与 cron 定时。exit 是脚本的退出码；run 是运行编号。exit=0 还需匹配新报告；127 在本课表示依赖缺失。读取日志的 tail 自身可以成功，日志中的脚本仍可能失败。');
+  }
+  if(event?.kind==='ops-cron-status'){
+    add('当前运行 / 开机启用',(event.active?'active':'inactive')+' / '+(event.enabled?'enabled':'disabled'),'这是两项状态：start/stop 改现在，enable/disable 改正常开机启用关系。enable 本身不启动。对本课 crond，inactive 查询返回 3，disabled 查询返回 1，是查询结果，不自动代表硬件故障。');
+  }
   if(event?.kind==='ops-artifact')add('generatedAt / boot / source',lines.filter(value=>/"(generatedAt|boot|source)"/.test(value)).join('\n'),'用时间、启动轮次和生成方式排除旧报告或手工试跑。');
   if(command==='lscpu'){
     const count=label=>Number(lines.find(l=>l.startsWith(label+':'))?.split(':')[1]);

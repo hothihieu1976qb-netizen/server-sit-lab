@@ -375,7 +375,7 @@ function netReverse(e){
   return e.kind==='transfer'&&!e.failed&&e.target===LAB_PEER&&!e.udp&&e.reverse&&!e.fromB&&e.seconds===10&&e.streams===1&&e.port===5201&&e.offered===null;
 }
 
-const LINUX_WORK_COURSES=[...FOUNDATION_COURSES,...FILE_COURSES,...ACCOUNT_COURSES,...PACKAGE_COURSES,HOST_OPS_COURSE,...WEB_WORK_COURSES];
+const LINUX_WORK_COURSES=[...FOUNDATION_COURSES,...FILE_COURSES,...ACCOUNT_COURSES,...PACKAGE_COURSES,...SCHEDULE_COURSES,HOST_OPS_COURSE,...WEB_WORK_COURSES];
 const GUIDED_COURSES_BY_ID=new Map([...CORE_GUIDED_COURSES,NETWORK_GUIDED_COURSE,...EXTENDED_GUIDED_COURSES,...LINUX_WORK_COURSES].map(course=>[course.id,course]));
 const GUIDED_COURSES=[
   ...LINUX_WORK_COURSES.map(course=>course.id),

@@ -39,6 +39,7 @@ function runHostReport(machine,source){
   if(ops.log.length>80)ops.log.shift();
   if(reason)return {...modelError('collect: '+error,'ops-collect',reason,exitCode),runId,source};
   ops.latest={generatedAt:time,boot:machine.boot,source,account:'reportbot',checks:HOST_CHECKS.length,runId};
+  if(machine.scheduleTraining)ops.reportRevision=machine.scheduleTraining.revision;
   return modelResult('Wrote '+HOST_REPORT_RESULT+' ('+HOST_CHECKS.length+' checks)','ops-collect',{source,runId,exitCode:0});
 }
 
@@ -142,7 +143,7 @@ function runHostOpsCommand(machine,segment){
     const limit=Number(opts['-n']||10);
     if(command==='tail'&&(!Number.isInteger(limit)||limit<0))return modelError('tail: invalid number of lines','ops-job-log','arguments');
     const entries=command==='cat'?ops.log:limit?ops.log.slice(-limit):[];
-    return result(entries.map(entry=>entry.message).join('\n'),'ops-job-log',{scheduled:entries.findLast(entry=>entry.source==='cron'&&entry.boot===machine.boot&&entry.exitCode===0)?.scheduledAt});
+    return result(entries.map(entry=>entry.message).join('\n'),'ops-job-log',{entries:entries.map(entry=>({...entry})),scheduled:entries.findLast(entry=>entry.source==='cron'&&entry.boot===machine.boot&&entry.exitCode===0)?.scheduledAt});
   }
   if(['ls','cat'].includes(command)&&paths.includes(action))return modelError(command+': cannot access '+action+': No such file or unsupported view','ops-file','unavailable');
   return modelError(command+': unsupported action or target in the host work order','ops-command','arguments');

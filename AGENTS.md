@@ -15,7 +15,8 @@
 - 文件与日志取证已经形成独立阶段，源码在 `file-lab.js` 和 `file-courses.js`，含三节课与一项独立交接。
 - 账号与最小权限阶段已接入，模型在 `account-lab.js`，课程在 `account-courses.js`。复用 `ops.groupMember` 与现有追加组操作。普通身份、旧会话组快照和新进程身份分开取证；刷新保留会话，模拟重启重建组快照。
 - 软件包与运行环境阶段已接入，模型在 `package-lab.js`，课程在 `package-courses.js`。复用 RPM/DNF 安装状态及巡检脚本；当前普通终端 PATH 单独保存。产物以 runId、boot、source 对应本轮运行，旧报告不自动算通过。
-- 下一批补服务与定时任务的基础课。复用 crond 的当前运行、开机启用、模拟时钟与派发日志，先解释 start/enable，再分开验证计划配置、派发、脚本结果和产物。最后衔接 OPS-002 综合工单，避免重复开发调度模型。
+- 服务与定时任务阶段已接入，课程在 `schedule-courses.js`，初态与证据规则在 `schedule-lab.js`。复用 crond、模板、时钟和日志。配置及启动变更递增 scheduleRevision，报告生成版本单独保存；旧报告重新读回不算变更后的运行。先跟练 start/enable/stop 和派发失败，再独立验收，最后进入 OPS-002。
+- 下一批补网络寻址与连通基础。复用 ip、ping、ss 和 curl，先讲接口、IP/前缀、本机回环与下一跳，再分层验证端口和业务。DNS 需另补解析模型后加入。
 
 ## 课程实现
 
